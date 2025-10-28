@@ -1,0 +1,17 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "jamrock/result",
+	"version": "1.0.0",
+	"title": "Jamrock Form",
+	"category": "design",
+	"icon": "smiley",
+	"description": "jamrock/form-result block.",
+	"supports": {
+		"html": false
+	},
+	"textdomain": "jamrock",
+	"editorScript": "file:./index.js",
+	"editorStyle": "file:./index.css",
+	"style": "file:./style-index.css"
+}

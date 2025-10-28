@@ -1,0 +1,49 @@
+/*!********************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ../../node_modules/.pnpm/css-loader@6.11.0_webpack@5.102.1/node_modules/css-loader/dist/cjs.js??ruleSet[1].rules[3].use[1]!../../node_modules/.pnpm/postcss-loader@6.2.1_postcss@8.5.6_webpack@5.102.1/node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[3].use[2]!../../node_modules/.pnpm/sass-loader@12.6.0_sass@1.93.2_webpack@5.102.1/node_modules/sass-loader/dist/cjs.js??ruleSet[1].rules[3].use[3]!./index.scss ***!
+  \********************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************/
+.jrj-admin .nav-tab {
+  cursor: pointer;
+}
+
+.jrj-admin .jrj-card {
+  background: #fff;
+  padding: 16px;
+  border: 1px solid #dcdcde;
+  border-radius: 4px;
+  margin-top: 16px;
+}
+
+.jrj-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.jrj-table th,
+.jrj-table td {
+  padding: 8px;
+  border-bottom: 1px solid #eee;
+  vertical-align: top;
+  text-align: left;
+}
+
+.jrj-toolbar {
+  margin: 12px 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.ellipsis {
+  max-width: 32rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jrj-pagination {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/*# sourceMappingURL=index.css.map*/

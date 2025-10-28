@@ -1,0 +1,43 @@
+.jrj-admin .nav-tab {
+    cursor: pointer;
+}
+.jrj-admin .jrj-card {
+    background: #fff;
+    padding: 16px;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    margin-top: 16px;
+}
+
+.jrj-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.jrj-table th,
+.jrj-table td {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+    text-align: left;
+}
+
+.jrj-toolbar {
+    margin: 12px 0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.ellipsis {
+    max-width: 32rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.jrj-pagination {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}

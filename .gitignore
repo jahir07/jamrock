@@ -1,0 +1,33 @@
+# folders
+/node_modules
+/assets/admin/form
+/assets/admin/result
+/assets-bk
+
+# Logs and caches
+/logs
+*.log
+.phpcs.cache
+
+# Composer
+/vendor
+/composer.lock
+
+# Build artifacts
+/dist
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.vite
+*.zip
+
+# Package managers
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# WordPress
+/wp-content/uploads

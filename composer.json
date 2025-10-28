@@ -1,0 +1,46 @@
+{
+  "name": "jamrock/wp-jamrock",
+  "description": "jamrock plugin.",
+  "type": "wordpress-plugin",
+  "license": "GPLv2",
+  "authors": [
+    {
+      "name": "jamrock",
+      "email": "mamun3d@gmail.com"
+    }
+  ],
+  "require": {
+    "php": ">=7.4"
+  },
+  "autoload": {
+    "psr-4": {
+      "Jamrock\\Core\\": "core/",
+      "Jamrock\\Controllers\\": "controllers/",
+      "Jamrock\\Shortcodes\\": "shortcodes/",
+      "Jamrock\\Ajax\\": "ajax/"
+    }
+  },
+  "archive": {
+    "exclude": [
+      "/tests",
+      ".phpcs.cache",
+      ".stylelintrc.json",
+      ".phpunit.result.cache",
+      "pnpm-lock.yaml",
+      "/phpunit.xml",
+      "/phpunit.xml.dist",
+      "/phpcs.xml",
+      "/.github",
+      "/.git",
+      "/.gitignore",
+      "/composer.*",
+      "/package.json",
+      "/node_modules",
+      "/src",
+      "/dist",
+      "/build",
+      "/assets/admin/form",
+      "/assets/admin/result"
+    ]
+  }
+}

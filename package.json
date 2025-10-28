@@ -1,0 +1,41 @@
+{
+  "name": "jamrock",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+  	"clean": "rimraf assets/blocks assets/js assets/admin",
+    "build": "npm run clean && npm run build:blocks && npm run build:frontend && npm run build:admin",
+    "build:blocks": "cd src/blocks && wp-scripts build ./index.js --output-path=../../assets/blocks",
+    "build:frontend": "cd src/frontend && wp-scripts build ./index.js --output-path=../../assets/js",
+    "build:admin": "cd src/admin && wp-scripts build ./index.js --output-path=../../assets/admin",
+    "start": "run-p watch:blocks watch:frontend watch:admin",
+    "watch:blocks": "cd src/blocks && wp-scripts start ./index.js --output-path=../../assets/blocks",
+    "watch:frontend": "cd src/frontend && wp-scripts start ./index.js --output-path=../../assets/js",
+    "watch:admin": "cd src/admin && wp-scripts start ./index.js --output-path=../../assets/admin",
+
+    "check-engines": "wp-scripts check-engines",
+    "check-licenses": "wp-scripts check-licenses",
+    "format": "wp-scripts format",
+    "lint:js": "wp-scripts lint-js 'src/**/*.{js,jsx,ts,tsx}'",
+    "lint:scss": "wp-scripts lint-style 'src/sass/**/*.scss'",
+    "watch:css": "sass src/sass:assets/css --source-map --style=expanded --quiet-deps --no-error-css -w",
+    "build:css": "sass src/sass:assets/css --style=compressed --quiet-deps --no-error-css",
+    "zip": "pnpm run build && pnpm run build:css && composer run prep && composer run build-zip"
+  },
+  "devDependencies": {
+    "@wordpress/scripts": "^24.4.0",
+    "npm-run-all": "^4.1.5",
+    "sass": "^1.93.2",
+    "stylelint": "^16.24.0",
+    "stylelint-config-wordpress": "^17.0.0",
+    "vue": "^3.5.22"
+  },
+  "browserslist": [
+    "extends @wordpress/browserslist-config"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@10.19.0+sha512.c9fc7236e92adf5c8af42fd5bf1612df99c2ceb62f27047032f4720b33f8eacdde311865e91c411f2774f618d82f320808ecb51718bfa82c060c4ba7c76a32b8"
+}
