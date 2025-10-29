@@ -10,7 +10,7 @@
 .phpcs.cache
 
 # Composer
-/vendor
+# /vendor
 /composer.lock
 
 # Build artifacts

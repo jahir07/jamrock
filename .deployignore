@@ -1,0 +1,49 @@
+# ----------------------------
+# Development & Build files
+# ----------------------------
+node_modules/
+src/
+dist/
+assets-bk/
+*.map
+
+# ----------------------------
+# Composer & Package Manager
+# ----------------------------
+composer.lock
+composer.phar
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# ----------------------------
+# Tests & Logs
+# ----------------------------
+tests/
+coverage/
+logs/
+*.log
+.phpcs.cache
+
+# ----------------------------
+# System / Editor / OS files
+# ----------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.zip
+*.vite
+
+# ----------------------------
+# WordPress Environment
+# ----------------------------
+wp-content/uploads/
+
+# ----------------------------
+# Git & CI/CD files
+# ----------------------------
+.git/
+.github/
+.gitignore
+.deployignore
