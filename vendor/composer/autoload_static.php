@@ -10,8 +10,10 @@ class ComposerStaticInit110916cdb453f091589efd734aebede8
         'J' => 
         array (
             'Jamrock\\Shortcodes\\' => 19,
+            'Jamrock\\Services\\' => 17,
             'Jamrock\\Core\\' => 13,
             'Jamrock\\Controllers\\' => 20,
+            'Jamrock\\CLI\\' => 12,
             'Jamrock\\Ajax\\' => 13,
         ),
     );
@@ -21,6 +23,10 @@ class ComposerStaticInit110916cdb453f091589efd734aebede8
         array (
             0 => __DIR__ . '/../..' . '/shortcodes',
         ),
+        'Jamrock\\Services\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/services',
+        ),
         'Jamrock\\Core\\' => 
         array (
             0 => __DIR__ . '/../..' . '/core',
@@ -28,6 +34,10 @@ class ComposerStaticInit110916cdb453f091589efd734aebede8
         'Jamrock\\Controllers\\' => 
         array (
             0 => __DIR__ . '/../..' . '/controllers',
+        ),
+        'Jamrock\\CLI\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/cli',
         ),
         'Jamrock\\Ajax\\' => 
         array (

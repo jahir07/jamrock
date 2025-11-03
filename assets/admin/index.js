@@ -20411,110 +20411,263 @@ ${codeFrame}` : message);
 
 /***/ }),
 
-/***/ "./components/ApplicantsList.js":
-/*!**************************************!*\
-  !*** ./components/ApplicantsList.js ***!
-  \**************************************/
+/***/ "./components/ApplicantsWithComposite.js":
+/*!***********************************************!*\
+  !*** ./components/ApplicantsWithComposite.js ***!
+  \***********************************************/
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
 /* harmony export */ });
-/* harmony import */ var vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue/dist/vue.esm-bundler.js */ "../../node_modules/.pnpm/vue@3.5.22_typescript@5.9.3/node_modules/vue/dist/vue.esm-bundler.js");
+// Inject component-scoped CSS once.!
+const JRJ_APPLICANTS_CSS_ID = "jrj-applicants-css"; //!
 
+function injectApplicantsCss() {
+  //!
+  if (document.getElementById(JRJ_APPLICANTS_CSS_ID)) return; //!
+  const style = document.createElement("style"); //!
+  style.id = JRJ_APPLICANTS_CSS_ID; //!
+  style.textContent = `
+  .jrj-card { background:#fff; border:1px solid #e5e5e5; padding:16px; margin:16px 0; border-radius:8px; }
+  .jrj-table { width:100%; border-collapse:collapse; }
+  .jrj-table th, .jrj-table td { border-bottom:1px solid #eee; padding:8px 10px; text-align:left; }
+  .jrj-table thead th { background:#fafafa; font-weight:600; }
+  .jrj-pagination { display:flex; gap:8px; align-items:center; margin-top:10px; }
+
+  .notice.error { background:#ffecec; color:#c00; padding:8px 10px; border:1px solid #fcc; border-radius:6px; }
+
+  .button { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid #ddd; border-radius:6px; background:#f8f8f8; cursor:pointer; text-decoration:none; }
+  .button[disabled]{ opacity:.5; cursor:not-allowed; }
+
+  .actions .button + .button { margin-left:6px; }
+
+  .row { display:flex; gap:16px; }
+  .items-center { align-items:center; }
+  .ml-16 { margin-left:16px; }
+  .spacer { flex:1; }
+  .big { font-size:20px; font-weight:700; margin-bottom:4px; }
+  .muted { color:#666; font-size:12px; }
+
+  .badge { padding:2px 8px; border-radius:999px; font-size:12px; text-transform:capitalize; border:1px solid transparent; }
+  .badge.red { background:#fde7e7; color:#b30000; border-color:#f4bebe; }
+  .badge.amber { background:#fff4e1; color:#7a4b00; border-color:#f8da9e; }
+  .badge.blue { background:#e7f0ff; color:#0a3d91; border-color:#bcd3ff; }
+  .badge.gray { background:#f2f2f2; color:#444; border-color:#e0e0e0; }
+  .badge.green { background:#e8f7ee; color:#166534; border-color:#bfe6cd; }
+
+  /* Donut — percentage comes from the CSS var --pct, set via Vue inline style. */
+  .donut {
+    --size: 80px;
+    --border: 10px;
+    --pct: 0;
+    width: var(--size);
+    height: var(--size);
+    border-radius: 50%;
+    background: conic-gradient(#4caf50 calc(var(--pct) * 1%), #ddd 0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1.2em;
+    color: #333;
+  }
+  .donut-ring {
+    width: calc(var(--size) - var(--border) * 2);
+    height: calc(var(--size) - var(--border) * 2);
+    background: #fff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .grid { display:flex; gap:20px; justify-content:space-between; max-width:900px; flex-wrap:wrap; }
+  .grid .panel { flex:1 1 260px; padding:10px; border:1px solid #ccc; border-radius:8px; }
+  .grid .panel h4 { margin-top:0; }
+  `;
+  document.head.appendChild(style); //!
+}
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
-  name: 'ApplicantsList',
-  setup() {
-    const items = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)([]);
-    const total = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(0);
-    const page = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(1);
-    const perPage = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(10);
-    const loading = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(false);
-    const filter = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.reactive)({
-      status: ''
-    });
-    const load = async () => {
-      loading.value = true;
+  name: "ApplicantsWithComposite",
+  data() {
+    return {
+      rows: [],
+      total: 0,
+      page: 1,
+      perPage: 10,
+      loading: false,
+      error: "",
+      selectedId: null,
+      snap: null,
+      snapLoading: false,
+      snapErr: ""
+    };
+  },
+  methods: {
+    async loadList() {
+      this.loading = true;
+      this.error = "";
       try {
         const q = new URLSearchParams({
-          page: page.value,
-          per_page: perPage.value,
-          status: filter.status || ""
+          page: this.page,
+          per_page: this.perPage
         });
-        const res = await fetch(JRJ_ADMIN.root + "applicants?" + q.toString(), {
+        const res = await fetch(`${JRJ_ADMIN.root}applicants?` + q.toString(), {
           headers: {
             "X-WP-Nonce": JRJ_ADMIN.nonce
           }
         });
-        if (!res.ok) throw new Error("Failed to load applicants");
+        if (!res.ok) throw new Error("HTTP " + res.status); //!
         const data = await res.json();
-        items.value = data.items || [];
-        total.value = data.total || 0;
+        this.rows = data.items || [];
+        this.total = data.total || 0;
+      } catch (e) {
+        this.error = e?.message || "Failed to load applicants.";
       } finally {
-        loading.value = false;
+        this.loading = false;
       }
-    };
-    (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.onMounted)(load);
-    return {
-      items,
-      total,
-      page,
-      perPage,
-      filter,
-      loading,
-      load
-    };
+    },
+    async showComposite(id) {
+      this.selectedId = id;
+      this.snap = null;
+      this.snapErr = "";
+      this.snapLoading = true;
+      try {
+        const res = await fetch(`${JRJ_ADMIN.root}applicants/${id}/composite`, {
+          headers: {
+            "X-WP-Nonce": JRJ_ADMIN.nonce
+          }
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status); //!
+        this.snap = await res.json();
+      } catch (e) {
+        this.snapErr = e?.message || "Failed to load composite.";
+      } finally {
+        this.snapLoading = false;
+      }
+    },
+    async recompute() {
+      if (!this.selectedId) return; //!
+      this.snapLoading = true;
+      try {
+        const res = await fetch(`${JRJ_ADMIN.root}applicants/${this.selectedId}/composite/recompute`, {
+          method: "POST",
+          headers: {
+            "X-WP-Nonce": JRJ_ADMIN.nonce
+          }
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status); //!
+        const data = await res.json();
+        this.snap = data.snapshot;
+      } catch (e) {
+        alert(e?.message || "Recompute failed."); //!
+      } finally {
+        this.snapLoading = false;
+      }
+    },
+    pct() {
+      return this.snap ? Math.round(this.snap.composite || 0) : 0; //!
+    },
+    badge() {
+      if (!this.snap) return ""; //!
+      const s = this.snap.status_flag;
+      if (s === "disqualified") return "badge red"; //!
+      if (s === "hold") return "badge amber"; //!
+      if (s === "provisional") return "badge blue"; //!
+      if (s === "pending") return "badge gray"; //!
+      return "badge green"; //!
+    },
+    urlPhysical(r) {
+      return `${window.location.origin}/internal-physical/?applicant_id=${encodeURIComponent(r.jamrock_user_id)}&applicant_email=${encodeURIComponent(r.email)}&jrj_edit=1`; //!
+    },
+    urlSkills(r) {
+      return `${window.location.origin}/internal-skills/?applicant_id=${encodeURIComponent(r.jamrock_user_id)}&applicant_email=${encodeURIComponent(r.email)}&jrj_edit=1`; //!
+    },
+    urlMedical(r) {
+      return `${window.location.origin}/internal-medical/?applicant_id=${encodeURIComponent(r.jamrock_user_id)}&applicant_email=${encodeURIComponent(r.email)}&jrj_edit=1`; //!
+    }
+  },
+  mounted() {
+    injectApplicantsCss(); // Ensure CSS is present.!
+    this.loadList(); //!
   },
   template: `
-    <div class="jrj-card">
-      <h2>Applicants</h2>
-      <div class="jrj-toolbar">
-        <label>Status
-          <select v-model="filter.status" @change="page=1; load()">
-            <option value="">All</option>
-            <option>applied</option>
-            <option>shortlisted</option>
-            <option>hired</option>
-            <option>active</option>
-            <option>inactive</option>
-            <option>knockout</option>
-          </select>
-        </label>
-        <label>Per page
-          <select v-model.number="perPage" @change="page=1; load()">
-            <option :value="10">10</option>
-            <option :value="20">20</option>
-            <option :value="50">50</option>
-          </select>
-        </label>
+  <div class="jrj-card">
+    <h2>Applicants</h2>
+    <div v-if="error" class="notice error">{{ error }}</div>
+    <div v-if="loading">Loading…</div>
+
+    <table class="jrj-table" v-else>
+      <thead>
+      <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Status</th>
+        <th>Score</th>
+        <th>Updated</th>
+        <th>Composite</th>
+        <th>Recruiter/manager</th>
+      </tr>
+      </thead>
+      <tbody>
+        <tr v-for="r in rows" :key="r.id">
+          <td>{{ r.id }}</td>
+          <td>{{ r.first_name }} {{ r.last_name }}</td>
+          <td>{{ r.email }}</td>
+          <td>{{ r.status }}</td>
+          <td>{{ r.score_total ?? 0 }}</td>
+          <td>{{ r.updated_at }}</td>
+          <td><button class="button" @click="showComposite(r.id)">View Composite</button></td>
+          <td class="actions">
+            <a class="button" :href="urlPhysical(r)" target="_blank">Physical</a>
+            <a class="button" :href="urlSkills(r)"   target="_blank">Skills</a>
+            <a class="button" :href="urlMedical(r)"  target="_blank">Medical</a>
+          </td>
+        </tr>
+        <tr v-if="!rows.length"><td colspan="8">No applicants.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="jrj-pagination" v-if="total>perPage">
+      <button class="button" :disabled="page===1" @click="page--; loadList()">«</button>
+      <span>Page {{ page }}</span>
+      <button class="button" :disabled="page*perPage>=total" @click="page++; loadList()">»</button>
+    </div>
+  </div>
+
+  <div class="jrj-card" v-if="selectedId">
+    <h2>Composite — Applicant #{{ selectedId }}</h2>
+    <div v-if="snapErr" class="notice error">{{ snapErr }}</div>
+    <div v-else-if="snapLoading">Loading…</div>
+    <div v-else-if="snap">
+      <div class="row items-center">
+        <!-- Bind --pct so the donut fills correctly. -->
+        <div class="donut" :style="{ '--pct': pct() }"><div class="donut-ring">{{ pct() }}</div></div>
+        <div class="ml-16">
+          <div class="big">{{ Math.round(snap.composite||0) }}/100 ({{ snap.grade||'?' }})</div>
+          <span :class="badge()">{{ snap.status_flag }}</span>
+          <div class="muted">Computed: {{ snap.computed_at }} · v{{ snap.formula }}</div>
+        </div>
+        <div class="spacer"></div>
+        <button class="button" @click="recompute">Recompute</button>
       </div>
-      <table class="jrj-table">
-        <thead>
-          <tr>
-            <th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Score</th><th>Updated</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="loading"><td colspan="7">Loading…</td></tr>
-          <tr v-for="r in items" :key="r.id">
-            <td>{{ r.id }}</td>
-            <td>{{ r.first_name }} {{ r.last_name }}</td>
-            <td>{{ r.email }}</td>
-            <td>{{ r.phone || '-' }}</td>
-            <td>{{ r.status }}</td>
-            <td>{{ r.score_total ?? '0' }}</td>
-            <td>{{ r.updated_at }}</td>
-          </tr>
-          <tr v-if="!loading && items.length===0"><td colspan="7">No items</td></tr>
-        </tbody>
-      </table>
-      <div class="jrj-pagination" v-if="total > perPage">
-        <button class="button" :disabled="page===1" @click="page--; load()">«</button>
-        <span>Page {{ page }}</span>
-        <button class="button" :disabled="page * perPage >= total" @click="page++; load()">»</button>
+
+      <h3>Components</h3>
+      <div class="grid">
+        <div class="panel" v-for="(comp, key) in snap.components" :key="key">
+          <h4 style="text-transform:capitalize">{{ key }}</h4>
+          <div>Raw: {{ comp.raw ?? '—' }}</div>
+          <div>Normalized: {{ comp.norm ?? '—' }}</div>
+          <div v-if="comp.flags && Object.keys(comp.flags).length">Flags: {{ comp.flags }}</div>
+          <div class="muted">Updated: {{ comp.ts || '—' }}</div>
+        </div>
       </div>
     </div>
+    <div v-else class="muted">No composite yet.</div>
+  </div>
   `
 });
 
@@ -20555,7 +20708,7 @@ __webpack_require__.r(__webpack_exports__);
 
     const today = new Date();
     const startDefault = new Date(today);
-    startDefault.setDate(startDefault.getDate() - 30);
+    startDefault.setDate(startDefault.getDate() - 10);
     const dates = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.reactive)({
       start: fmt(startDefault),
       end: fmt(today)
@@ -20594,6 +20747,7 @@ __webpack_require__.r(__webpack_exports__);
           candidness: filter.candidness || ""
         });
         const data = await getJSON("assessments?" + q.toString());
+        console.log(data);
         items.value = data.items || [];
         total.value = data.total || 0;
       } catch (e) {
@@ -20666,6 +20820,7 @@ __webpack_require__.r(__webpack_exports__);
       <label>Candidness
         <select v-model="filter.candidness" @change="page=1; load()">
           <option value="">All</option>
+          <option value="completed">Completed</option>
           <option value="cleared">cleared</option>
           <option value="flagged">flagged</option>
           <option value="pending">pending</option>
@@ -20700,6 +20855,7 @@ __webpack_require__.r(__webpack_exports__);
           <th>Applicant</th>
           <th>Email</th>
           <th>Provider</th>
+          <th>Assessment url</th>
           <th>Score</th>
           <th>Candidness</th>
           <!-- <th>Completed</th> -->
@@ -20712,6 +20868,7 @@ __webpack_require__.r(__webpack_exports__);
           <td>{{ r.first_name }} {{ r.last_name }}</td>
           <td>{{ r.email }}</td>
           <td>{{ r.provider }}</td>
+          <td>{{ r.assessment_url }}</td>
           <td>{{ r.overall_score ?? '-' }}</td>
           <td>{{ r.candidness === 'pending' ? 'Awaiting Results' : r.candidness }}</td>
           <!-- <td>{{ r.completed_at || '-' }}</td> -->
@@ -21161,65 +21318,93 @@ __webpack_require__.r(__webpack_exports__);
 /* global JRJ_ADMIN */
 
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
-  name: 'SettingsPage',
+  name: "SettingsPage",
   setup() {
+    // Active tab: 'general' | 'composite'.
+    const tab = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)("general"); // default general.
+
     const settings = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.reactive)({
-      form_id: '',
-      api_key: '',
-      callback_ok: ''
+      // General.
+      form_id: "",
+      api_key: "",
+      callback_ok: "",
+      set_login_page: "",
+      set_assessment_page: "",
+      // Composite.
+      weights: {
+        psymetrics: 40,
+        autoproctor: 20,
+        physical: 20,
+        skills: 20,
+        medical: 0
+      },
+      bands: {
+        A: 85,
+        B: 70,
+        C: 55,
+        D: 0
+      }
+    });
+    const ui = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.reactive)({
+      // General status.
+      loading: false,
+      saving: false,
+      notice: "",
+      // Composite status.
+      compLoading: false,
+      compSaving: false,
+      compError: "",
+      compNotice: ""
     });
 
-    // simple status string; render in template
-    const ui = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.reactive)({
-      notice: '',
-      saving: false,
-      loading: false
-    });
-    const load = async () => {
+    // ------- General load/save -------
+
+    const loadGeneral = async () => {
       ui.loading = true;
+      ui.notice = "";
       try {
-        var _data$form_id, _data$api_key, _data$callback_ok;
+        var _data$form_id, _data$api_key, _data$callback_ok, _data$set_login_page, _data$set_assessment_;
         const res = await fetch(JRJ_ADMIN.root + "settings", {
           headers: {
-            'X-WP-Nonce': JRJ_ADMIN.nonce
+            "X-WP-Nonce": JRJ_ADMIN.nonce
           },
-          cache: 'no-store'
+          cache: "no-store"
         });
+        if (!res.ok) throw new Error("HTTP " + res.status);
         const data = await res.json();
-
-        // explicit assignments (reactivity-safe)
-        settings.form_id = (_data$form_id = data.form_id) !== null && _data$form_id !== void 0 ? _data$form_id : '';
-        settings.api_key = (_data$api_key = data.api_key) !== null && _data$api_key !== void 0 ? _data$api_key : '';
-        settings.callback_ok = (_data$callback_ok = data.callback_ok) !== null && _data$callback_ok !== void 0 ? _data$callback_ok : '';
-        ui.notice = '';
+        settings.form_id = (_data$form_id = data.form_id) !== null && _data$form_id !== void 0 ? _data$form_id : "";
+        settings.api_key = (_data$api_key = data.api_key) !== null && _data$api_key !== void 0 ? _data$api_key : "";
+        settings.callback_ok = (_data$callback_ok = data.callback_ok) !== null && _data$callback_ok !== void 0 ? _data$callback_ok : "";
+        settings.set_login_page = (_data$set_login_page = data.set_login_page) !== null && _data$set_login_page !== void 0 ? _data$set_login_page : "";
+        settings.set_assessment_page = (_data$set_assessment_ = data.set_assessment_page) !== null && _data$set_assessment_ !== void 0 ? _data$set_assessment_ : "";
         await (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.nextTick)();
-      } catch (err) {
-        ui.notice = 'Failed to load settings.';
+      } catch (e) {
+        ui.notice = "Failed to load general settings.";
       } finally {
         ui.loading = false;
       }
     };
-    const save = async () => {
+    const saveGeneral = async () => {
       ui.saving = true;
-      ui.notice = '';
+      ui.notice = "";
       try {
-        const res = await fetch(JRJ_ADMIN.root + 'settings', {
-          method: 'POST',
+        const res = await fetch(JRJ_ADMIN.root + "settings", {
+          method: "POST",
           headers: {
-            'X-WP-Nonce': JRJ_ADMIN.nonce,
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-store'
+            "X-WP-Nonce": JRJ_ADMIN.nonce,
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store"
           },
           body: JSON.stringify({
             form_id: Number(settings.form_id) || 0,
-            // keep type stable
-            api_key: settings.api_key || '',
-            callback_ok: settings.callback_ok || ''
+            api_key: settings.api_key || "",
+            callback_ok: settings.callback_ok || "",
+            set_login_page: settings.set_login_page || "",
+            set_assessment_page: settings.set_assessment_page || ""
           })
         });
         if (!res.ok) {
-          // try to surface API error text if available
-          let msg = 'Save failed.';
+          let msg = "Save failed.";
           try {
             const j = await res.json();
             if (j && j.message) msg = j.message;
@@ -21227,42 +21412,228 @@ __webpack_require__.r(__webpack_exports__);
           ui.notice = msg;
           return;
         }
-        ui.notice = 'Settings saved.';
-      } catch (err) {
-        ui.notice = 'Network error while saving.';
-        // optionally log: console.error(err);
+        ui.notice = "General settings saved.";
+      } catch (e) {
+        ui.notice = "Network error while saving general settings.";
       } finally {
         ui.saving = false;
       }
     };
-    (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.onMounted)(load);
+
+    // ------- Composite load/save -------
+
+    const loadCompositeOptions = async () => {
+      ui.compLoading = true;
+      ui.compError = "";
+      ui.compNotice = "";
+      try {
+        var _data$weights$psymetr, _data$weights$autopro, _data$weights$physica, _data$weights$skills, _data$weights$medical, _data$bands$A, _data$bands$B, _data$bands$C, _data$bands$D;
+        const res = await fetch(JRJ_ADMIN.root + "composite/options", {
+          headers: {
+            "X-WP-Nonce": JRJ_ADMIN.nonce
+          },
+          cache: "no-store"
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        settings.weights = {
+          psymetrics: Number((_data$weights$psymetr = data.weights?.psymetrics) !== null && _data$weights$psymetr !== void 0 ? _data$weights$psymetr : 40),
+          autoproctor: Number((_data$weights$autopro = data.weights?.autoproctor) !== null && _data$weights$autopro !== void 0 ? _data$weights$autopro : 20),
+          physical: Number((_data$weights$physica = data.weights?.physical) !== null && _data$weights$physica !== void 0 ? _data$weights$physica : 20),
+          skills: Number((_data$weights$skills = data.weights?.skills) !== null && _data$weights$skills !== void 0 ? _data$weights$skills : 20),
+          medical: Number((_data$weights$medical = data.weights?.medical) !== null && _data$weights$medical !== void 0 ? _data$weights$medical : 0)
+        };
+        settings.bands = {
+          A: Number((_data$bands$A = data.bands?.A) !== null && _data$bands$A !== void 0 ? _data$bands$A : 85),
+          B: Number((_data$bands$B = data.bands?.B) !== null && _data$bands$B !== void 0 ? _data$bands$B : 70),
+          C: Number((_data$bands$C = data.bands?.C) !== null && _data$bands$C !== void 0 ? _data$bands$C : 55),
+          D: Number((_data$bands$D = data.bands?.D) !== null && _data$bands$D !== void 0 ? _data$bands$D : 0)
+        };
+      } catch (e) {
+        ui.compError = "Failed to load composite options.";
+      } finally {
+        ui.compLoading = false;
+      }
+    };
+    const saveCompositeOptions = async () => {
+      ui.compSaving = true;
+      ui.compError = "";
+      ui.compNotice = "";
+      try {
+        const res = await fetch(JRJ_ADMIN.root + "composite/options", {
+          method: "POST",
+          headers: {
+            "X-WP-Nonce": JRJ_ADMIN.nonce,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            weights: settings.weights,
+            bands: settings.bands
+          })
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        await res.json();
+        ui.compNotice = "Composite settings saved.";
+      } catch (e) {
+        ui.compError = "Failed to save composite settings.";
+      } finally {
+        ui.compSaving = false;
+      }
+    };
+
+    // ------- Helpers -------
+
+    const sumWeights = () => Number(settings.weights.psymetrics || 0) + Number(settings.weights.autoproctor || 0) + Number(settings.weights.physical || 0) + Number(settings.weights.skills || 0) + Number(settings.weights.medical || 0);
+    const resetDefaults = () => {
+      settings.weights = {
+        psymetrics: 40,
+        autoproctor: 20,
+        physical: 20,
+        skills: 20,
+        medical: 0
+      };
+      settings.bands = {
+        A: 85,
+        B: 70,
+        C: 55,
+        D: 0
+      };
+    };
+
+    // Load both areas initially so users can switch tabs instantly.
+    (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.onMounted)(async () => {
+      await Promise.all([loadGeneral(), loadCompositeOptions()]);
+    });
     return {
+      tab,
       settings,
       ui,
-      save
+      // general
+      saveGeneral,
+      // composite
+      saveCompositeOptions,
+      sumWeights,
+      resetDefaults
     };
   },
   template: `
     <div class="jrj-card">
-      <h2>Settings</h2>
-	  <p v-if="ui.notice">{{ ui.notice }}</p>
-      <form @submit.prevent="save">
-        <table class="form-table"><tbody>
-          <tr>
-            <th><label>Gravity Form ID</label></th>
-            <td><input type="number" v-model.number="settings.form_id" /></td>
-          </tr>
-          <tr>
-            <th><label>Psymetrics API Key</label></th>
-            <td><input type="text" v-model="settings.api_key" /></td>
-          </tr>
-          <tr>
-            <th><label>Callback URL</label></th>
-            <td><input type="url" v-model="settings.callback_ok" placeholder="https://..." /></td>
-          </tr>
-        </tbody></table>
-        <p><button type="submit" :disabled="ui.saving" class="button button-primary">Save Settings</button></p>
-      </form>
+      <!-- Local tabs -->
+      <div class="nav-tab-wrapper">
+        <button :class="['nav-tab', {'nav-tab-active': tab==='general'}]" @click="tab='general'">
+          General
+        </button>
+        <button :class="['nav-tab', {'nav-tab-active': tab==='composite'}]" @click="tab='composite'">
+          Composite
+        </button>
+      </div>
+
+      <!-- General tab -->
+      <div v-if="tab==='general'">
+        <p v-if="ui.notice">{{ ui.notice }}</p>
+
+        <form @submit.prevent="saveGeneral">
+          <h3>Psymetrics and Gravity Form Settings</h3>
+          <table class="form-table striped"><tbody>
+            <tr>
+              <th><label>Gravity Form ID</label></th>
+              <td><input type="number" v-model.number="settings.form_id" /></td>
+            </tr>
+            <tr>
+              <th><label>Set Login page URL</label></th>
+              <td><input type="text" v-model="settings.set_login_page" placeholder="/apply-now" /></td>
+            </tr>
+            <tr>
+              <th><label>Set Assessment page URL</label></th>
+              <td><input type="text" v-model="settings.set_assessment_page" placeholder="/assessment" /></td>
+            </tr>
+            <tr>
+              <th><label>Psymetrics API Key</label></th>
+              <td><input type="text" v-model="settings.api_key" /></td>
+            </tr>
+            <tr>
+              <th><label>Callback URL (webhook)</label></th>
+              <td><input type="url" v-model="settings.callback_ok" placeholder="https://..." /></td>
+            </tr>
+          </tbody></table>
+
+          <p>
+            <button type="submit" :disabled="ui.saving" class="button button-primary">
+              Save Settings
+            </button>
+          </p>
+        </form>
+      </div>
+
+      <!-- Composite tab -->
+      <div v-else-if="tab==='composite'">
+        <div v-if="ui.compLoading">Loading…</div>
+        <div v-else>
+          <p v-if="ui.compNotice" class="notice notice-success">{{ ui.compNotice }}</p>
+          <p v-if="ui.compError" class="notice notice-error">{{ ui.compError }}</p>
+
+          <h3>Weights (Sum ≈ 100)</h3>
+          <table class="form-table striped">
+            <tbody>
+              <tr>
+                <th scope="row"><label>Psymetrics</label></th>
+                <td><input type="number" v-model.number="settings.weights.psymetrics" min="0" max="40" class="small-text" /><small> Max 40</small></td>
+              </tr>
+              <tr>
+                <th scope="row"><label>AutoProctor</label></th>
+                <td><input type="number" v-model.number="settings.weights.autoproctor" min="0" class="small-text" /></td>
+              </tr>
+              <tr>
+                <th scope="row"><label>Physical</label></th>
+                <td><input type="number" v-model.number="settings.weights.physical" min="0" max="20" class="small-text" /> <small> Max 20</small></td>
+              </tr>
+              <tr>
+                <th scope="row"><label>Skills</label></th>
+                <td><input type="number" v-model.number="settings.weights.skills" min="0" max="20" class="small-text" /> <small> Max 20</small></td>
+              </tr>
+              <tr>
+                <th scope="row"><label>Medical</label></th>
+                <td><input type="number" v-model.number="settings.weights.medical" min="0" max="20" class="small-text" /> <small> Max 20</small></td>
+              </tr>
+              <tr>
+                <th scope="row"><strong>Total</strong></th>
+                <td><span class="muted">{{ sumWeights() }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 class="mt-24">Grade Bands</h3>
+          <table class="form-table striped">
+            <tbody>
+              <tr>
+                <th scope="row"><label>A ≥</label></th>
+                <td><input type="number" v-model.number="settings.bands.A" min="0" max="100" class="small-text" /></td>
+              </tr>
+              <tr>
+                <th scope="row"><label>B ≥</label></th>
+                <td><input type="number" v-model.number="settings.bands.B" min="0" max="100" class="small-text" /></td>
+              </tr>
+              <tr>
+                <th scope="row"><label>C ≥</label></th>
+                <td><input type="number" v-model.number="settings.bands.C" min="0" max="100" class="small-text" /></td>
+              </tr>
+              <tr>
+                <th scope="row"><label>D ≥</label></th>
+                <td><input type="number" v-model.number="settings.bands.D" min="0" max="100" class="small-text" disabled /></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p class="submit">
+            <button class="button button-primary" :disabled="ui.compSaving" @click="saveCompositeOptions">
+              Save Composite Settings
+            </button>
+            <button type="button" class="button" @click="resetDefaults">
+              Reset Defaults
+            </button>
+          </p>
+        </div>
+      </div>
     </div>
   `
 });
@@ -21359,7 +21730,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue/dist/vue.esm-bundler.js */ "../../node_modules/.pnpm/vue@3.5.22_typescript@5.9.3/node_modules/vue/dist/vue.esm-bundler.js");
 /* harmony import */ var _index_scss__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./index.scss */ "./index.scss");
 /* harmony import */ var _components_SettingsPage_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./components/SettingsPage.js */ "./components/SettingsPage.js");
-/* harmony import */ var _components_ApplicantsList_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./components/ApplicantsList.js */ "./components/ApplicantsList.js");
+/* harmony import */ var _components_ApplicantsWithComposite_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./components/ApplicantsWithComposite.js */ "./components/ApplicantsWithComposite.js");
 /* harmony import */ var _components_AssessmentsList_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./components/AssessmentsList.js */ "./components/AssessmentsList.js");
 /* harmony import */ var _components_CoursesList_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./components/CoursesList.js */ "./components/CoursesList.js");
 /* harmony import */ var _components_HousingList_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./components/HousingList.js */ "./components/HousingList.js");
@@ -21388,7 +21759,7 @@ const InfoPage = {
 		</div>
 	`
 };
-const allowedTabs = ['settings', 'courses', 'housing', 'applicants', 'assessments', 'feedback', 'logs', 'info'];
+const allowedTabs = ["settings", "courses", "housing", "applicantswithcomposite", "assessments", "feedback", "logs", "info"];
 function readTabFromUrl() {
   const u = new URL(window.location.href);
   const v = u.searchParams.get('view');
@@ -21401,12 +21772,12 @@ function writeTabToUrl(tab) {
 }
 const App = {
   components: {
-    FeedbackList: _components_FeedbackList_js__WEBPACK_IMPORTED_MODULE_8__["default"],
     SettingsPage: _components_SettingsPage_js__WEBPACK_IMPORTED_MODULE_2__["default"],
-    ApplicantsList: _components_ApplicantsList_js__WEBPACK_IMPORTED_MODULE_3__["default"],
+    ApplicantsWithComposite: _components_ApplicantsWithComposite_js__WEBPACK_IMPORTED_MODULE_3__["default"],
     AssessmentsList: _components_AssessmentsList_js__WEBPACK_IMPORTED_MODULE_4__["default"],
     CoursesList: _components_CoursesList_js__WEBPACK_IMPORTED_MODULE_5__["default"],
     HousingList: _components_HousingList_js__WEBPACK_IMPORTED_MODULE_6__["default"],
+    FeedbackList: _components_FeedbackList_js__WEBPACK_IMPORTED_MODULE_8__["default"],
     LogsList: _components_LogsList_js__WEBPACK_IMPORTED_MODULE_7__["default"],
     InfoPage
   },
@@ -21445,8 +21816,8 @@ const App = {
       <h2 class="nav-tab-wrapper">
         <button :class="['nav-tab', {'nav-tab-active': tab==='settings'}]"    @click.prevent="setTab('settings')">Settings</button>
         <button :class="['nav-tab', {'nav-tab-active': tab==='courses'}]"     @click.prevent="setTab('courses')">Courses</button>
-        <button :class="['nav-tab', {'nav-tab-active': tab==='applicants'}]"  @click.prevent="setTab('applicants')">Applicants</button>
-        <button :class="['nav-tab', {'nav-tab-active': tab==='assessments'}]" @click.prevent="setTab('assessments')">Assessments</button>
+        <button :class="['nav-tab', {'nav-tab-active': tab==='applicantswithcomposite'}]" @click.prevent="setTab('applicantswithcomposite')">Applicants</button>
+        <button :class="['nav-tab', {'nav-tab-active': tab==='assessments'}]"  @click.prevent="setTab('assessments')">Assessments</button>
 		    <button :class="['nav-tab', {'nav-tab-active': tab==='housing'}]"     @click.prevent="setTab('housing')">Housing</button>
         <button :class="['nav-tab', {'nav-tab-active': tab==='feedback'}]"    @click.prevent="setTab('feedback')">Feedback</button>
 		    <button :class="['nav-tab', {'nav-tab-active': tab==='logs'}]"        @click.prevent="setTab('logs')">Logs</button>
@@ -21456,7 +21827,7 @@ const App = {
       <SettingsPage    v-if="tab==='settings'" />
       <CoursesList     v-else-if="tab==='courses'" />
       <HousingList     v-else-if="tab==='housing'" />
-      <ApplicantsList  v-else-if="tab==='applicants'" />
+      <ApplicantsWithComposite  v-else-if="tab==='applicantswithcomposite'" />
       <AssessmentsList v-else-if="tab==='assessments'" />
       <FeedbackList    v-else-if="tab==='feedback'" />
       <LogsList        v-else-if="tab==='logs'" />

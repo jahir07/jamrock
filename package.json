@@ -3,16 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-  	"clean": "rimraf assets/blocks assets/js assets/admin",
+    "clean": "rimraf assets/blocks assets/js assets/admin",
     "build": "npm run clean && npm run build:blocks && npm run build:frontend && npm run build:admin",
     "build:blocks": "cd src/blocks && wp-scripts build ./index.js --output-path=../../assets/blocks",
     "build:frontend": "cd src/frontend && wp-scripts build ./index.js --output-path=../../assets/js",
     "build:admin": "cd src/admin && wp-scripts build ./index.js --output-path=../../assets/admin",
-    "start": "run-p watch:blocks watch:frontend watch:admin",
+    "start": "run-p watch:blocks watch:frontend watch:admin watch:css",
     "watch:blocks": "cd src/blocks && wp-scripts start ./index.js --output-path=../../assets/blocks",
     "watch:frontend": "cd src/frontend && wp-scripts start ./index.js --output-path=../../assets/js",
     "watch:admin": "cd src/admin && wp-scripts start ./index.js --output-path=../../assets/admin",
-
     "check-engines": "wp-scripts check-engines",
     "check-licenses": "wp-scripts check-licenses",
     "format": "wp-scripts format",

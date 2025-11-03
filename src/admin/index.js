@@ -8,7 +8,7 @@ import {
 import './index.scss';
 
 import SettingsPage from './components/SettingsPage.js';
-import ApplicantsList from './components/ApplicantsList.js';
+import ApplicantsWithComposite from "./components/ApplicantsWithComposite.js";
 import AssessmentsList from './components/AssessmentsList.js';
 import CoursesList from './components/CoursesList.js';
 import HousingList from './components/HousingList.js';
@@ -32,14 +32,14 @@ const InfoPage = {
 };
 
 const allowedTabs = [
-	'settings',
-	'courses',
-	'housing',
-	'applicants',
-	'assessments',
-	'feedback',
-	'logs',
-	'info',
+  "settings",
+  "courses",
+  "housing",
+  "applicantswithcomposite",
+  "assessments",
+  "feedback",
+  "logs",
+  "info",
 ];
 
 function readTabFromUrl() {
@@ -56,12 +56,12 @@ function writeTabToUrl( tab ) {
 
 const App = {
   components: {
-    FeedbackList,
     SettingsPage,
-    ApplicantsList,
+    ApplicantsWithComposite,
     AssessmentsList,
     CoursesList,
     HousingList,
+    FeedbackList,
     LogsList,
     InfoPage,
   },
@@ -106,8 +106,8 @@ const App = {
       <h2 class="nav-tab-wrapper">
         <button :class="['nav-tab', {'nav-tab-active': tab==='settings'}]"    @click.prevent="setTab('settings')">Settings</button>
         <button :class="['nav-tab', {'nav-tab-active': tab==='courses'}]"     @click.prevent="setTab('courses')">Courses</button>
-        <button :class="['nav-tab', {'nav-tab-active': tab==='applicants'}]"  @click.prevent="setTab('applicants')">Applicants</button>
-        <button :class="['nav-tab', {'nav-tab-active': tab==='assessments'}]" @click.prevent="setTab('assessments')">Assessments</button>
+        <button :class="['nav-tab', {'nav-tab-active': tab==='applicantswithcomposite'}]" @click.prevent="setTab('applicantswithcomposite')">Applicants</button>
+        <button :class="['nav-tab', {'nav-tab-active': tab==='assessments'}]"  @click.prevent="setTab('assessments')">Assessments</button>
 		    <button :class="['nav-tab', {'nav-tab-active': tab==='housing'}]"     @click.prevent="setTab('housing')">Housing</button>
         <button :class="['nav-tab', {'nav-tab-active': tab==='feedback'}]"    @click.prevent="setTab('feedback')">Feedback</button>
 		    <button :class="['nav-tab', {'nav-tab-active': tab==='logs'}]"        @click.prevent="setTab('logs')">Logs</button>
@@ -117,7 +117,7 @@ const App = {
       <SettingsPage    v-if="tab==='settings'" />
       <CoursesList     v-else-if="tab==='courses'" />
       <HousingList     v-else-if="tab==='housing'" />
-      <ApplicantsList  v-else-if="tab==='applicants'" />
+      <ApplicantsWithComposite  v-else-if="tab==='applicantswithcomposite'" />
       <AssessmentsList v-else-if="tab==='assessments'" />
       <FeedbackList    v-else-if="tab==='feedback'" />
       <LogsList        v-else-if="tab==='logs'" />

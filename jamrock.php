@@ -24,6 +24,8 @@ define( 'JRJ_URL', plugins_url( '', JRJ_FILE ) );
 define( 'JRJ_ASSETS', JRJ_URL . '/assets' );
 
 // Require files.
+require_once JRJ_PATH . '/includes/helpers.php';
+require_once JRJ_PATH . '/includes/gf-internal-forms-upsert.php';
 require_once JRJ_PATH . '/includes/cpt.php';
 require_once JRJ_PATH . '/includes/announcements.php';
 
@@ -39,8 +41,42 @@ use Jamrock\Core\Installer;
 register_activation_hook(
 	__FILE__,
 	function () {
+		ob_start(); // capture any accidental output.
 		$installer = new Installer();
 		$installer->do_install();
+
+		// Gravity Forms internal forms setup.
+		require_once __DIR__ . '/includes/gf-internal-forms.php';
+		if ( class_exists( 'GFAPI' ) ) {
+			$physical_id = jrj_create_physical_form();
+			$skills_id   = jrj_create_skills_form();
+			$medical_id  = jrj_create_medical_form();
+
+			// Save for later use.
+			update_option( 'jrj_form_physical_id', $physical_id );
+			update_option( 'jrj_form_skills_id', $skills_id );
+			update_option( 'jrj_form_medical_id', $medical_id );
+
+			// Create internal assessment pages.
+			jrj_ensure_page( 'Internal – Physical', 'internal-physical', '[gravityform id="' . $physical_id . '" title="false" description="false" ajax="true"]' );
+			jrj_ensure_page( 'Internal – Skills', 'internal-skills', '[gravityform id="' . $skills_id . '" title="false" description="false" ajax="true"]' );
+			jrj_ensure_page( 'Internal – Medical', 'internal-medical', '[gravityform id="' . $medical_id . '" title="false" description="false" ajax="true"]' );
+
+			// Optional: dev-mode demo seed
+			if ( defined( 'JRJ_DEV_MODE' ) && JRJ_DEV_MODE ) {
+				jrj_seed_internal_demo(
+					array(
+						'physical' => $physical_id,
+						'skills'   => $skills_id,
+						'medical'  => $medical_id,
+					)
+				);
+			}
+		}
+		$out = ob_get_clean();
+		if ( ! empty( $out ) ) {
+			error_log( '[JAMROCK] Activation unexpected output: ' . substr( trim( $out ), 0, 500 ) );
+		}
 	}
 );
 
@@ -104,6 +140,12 @@ if ( ! function_exists( 'jamrock' ) ) {
 	function jamrock() {
 		return Plugin::instance();
 	}
+}
+
+// CLI command register কেবল WP-CLI context এ
+if ( defined( 'WP_CLI' ) && WP_CLI ) {
+	// Composer autoload ব্যবহার করলে namespace class পাওয়া যাবে
+	WP_CLI::add_command( 'jamrock', '\Jamrock\CLI\JamrockCLI' );
 }
 
 // lets play.

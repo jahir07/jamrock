@@ -11,10 +11,7 @@
 
 namespace Jamrock\Core;
 
-use Jamrock\Core\{Admin, Assets};
 use Jamrock\Shortcodes\{LearnDash, Dashboard, Announcements, Feedback as FeedbackShortcode};
-use Jamrock\Controllers\{Courses, CoursesSync, Applicants, Assessments, Feedback, Housing, Logs, Psymetrics, Settings, Webhooks};
-
 
 /**
  * Class Plugin.
@@ -138,29 +135,36 @@ final class Plugin {
 		// init classes.
 		add_action( 'init', array( $this, 'init_classes' ) );
 
+		// Admin only hooks.
+		( new \Jamrock\Core\Admin() )->hooks();
+
+		// Controllers.
+		( new \Jamrock\Controllers\Settings() )->hooks();
+		( new \Jamrock\Controllers\Psymetrics() )->hooks();
+		( new \Jamrock\Controllers\Composite() )->hooks();
+		// form IDs from options.
+		$form_physical = (int) get_option( 'jrj_form_physical_id', 0 ) ?: 2;
+		$form_skills   = (int) get_option( 'jrj_form_skillsform_skills: _id', 0 ) ?: 3;
+		$form_medical  = (int) get_option( 'jrj_form_medical_id', 0 ) ?: 4;
+		( new \Jamrock\Controllers\InternalAssessments( $form_physical, $form_skills, $form_medical ) )->hooks();
+
+		( new \Jamrock\Controllers\InternalGFEdit( $form_physical, $form_skills, $form_medical ) )->hooks();
+		( new \Jamrock\Controllers\Applicants() )->hooks();
+		( new \Jamrock\Controllers\Webhooks() )->hooks();
+		( new \Jamrock\Controllers\Housing() )->hooks();
+		( new \Jamrock\Controllers\Logs() )->hooks();
+		( new \Jamrock\Controllers\Courses() )->hooks();
+		// ( new Feedback() )->hooks();
+
+		( new \Jamrock\Controllers\CoursesSync() )->hooks();
+		( new \Jamrock\Controllers\Dashboard() )->hooks();
+		( new \Jamrock\Controllers\GravityFormsListener() )->hooks();
+		( new \Jamrock\Controllers\PsymetricsGFListener() )->hooks();
+
 		if ( function_exists( 'register_block_type' ) ) {
 			// gutenberg.
 			add_action( 'init', array( $this, 'register_block_types' ) );
 		}
-
-		// Admin only hooks.
-		( new Admin() )->hooks();
-
-		// Controllers.
-		( new Settings() )->hooks();
-		( new Psymetrics() )->hooks();
-		( new Webhooks() )->hooks();
-		( new Housing() )->hooks();
-		( new Logs() )->hooks();
-		( new Courses() )->hooks();
-		( new Assessments() )->hooks();
-		( new Applicants() )->hooks();
-		( new Feedback() )->hooks();
-
-		// Helper classes.
-		( new CoursesSync() )->hooks();
-		( new \Jamrock\Controllers\Dashboard() )->hooks();
-		( new \Jamrock\Controllers\GravityFormsListener() )->hooks();
 	}
 
 	/**
@@ -170,6 +174,33 @@ final class Plugin {
 	 */
 	public function localization_setup() {
 		load_plugin_textdomain( 'jamrock', false, dirname( plugin_basename( JRJ_FILE ) ) . '/languages/' );
+	}
+
+	/**
+	 * Initialize required classes
+	 *
+	 * @return void
+	 */
+	public function init_classes() {
+		// plugin assets.
+		$this->container['assets'] = new \Jamrock\Core\Assets();
+
+		// frontend.
+		if ( $this->is_request( 'frontend' ) ) {
+			// shortcode.
+			$this->container['learndash_shortcode']           = new LearnDash();
+			$this->container['learndash_dashboard_shortcode'] = new Dashboard();
+			$this->container['announcements']                 = new Announcements();
+
+			// Register PsymetricsAssessmentIframe shortcode.
+			\Jamrock\Shortcodes\PsymetricsAssessmentIframe::register();
+			// \Jamrock\Shortcodes\FeedbackShortcode::register();
+
+		}
+
+		if ( $this->is_request( 'ajax' ) ) {
+			$this->container['feedback_ajax'] = new \Jamrock\Ajax\Feedback();
+		}
 	}
 
 
@@ -203,49 +234,29 @@ final class Plugin {
 	 * @param array $attributes Shortcode attributes passed from WordPress.
 	 * @return string Rendered HTML of the feedback form.
 	 */
-	public function render_form( $attributes ) {
-		$shortcode = new FeedbackShortcode();
-		$result    = $shortcode->render_feedback_form_shortcode( $attributes );
+	// public function render_form($attributes)
+	// {
+	// $shortcode = new FeedbackShortcode();
+	// $result = $shortcode->render_feedback_form_shortcode($attributes);
 
-		return $result;
-	}
+	// return $result;
+	// }
 
-	/**
-	 * Render the [jamrock_result] shortcode.
-	 *
-	 * This method creates an instance of the Shortcode class
-	 * and delegates rendering of feedback results to it.
-	 *
-	 * @param array $attributes Shortcode attributes passed from WordPress.
-	 * @return string Rendered HTML output of the feedback results.
-	 */
-	public function render_result( $attributes ) {
-		$shortcode = new FeedbackShortcode();
-		return $shortcode->render_feedback_results_shortcode( $attributes );
-	}
+	// /**
+	// * Render the [jamrock_result] shortcode.
+	// *
+	// * This method creates an instance of the Shortcode class
+	// * and delegates rendering of feedback results to it.
+	// *
+	// * @param array $attributes Shortcode attributes passed from WordPress.
+	// * @return string Rendered HTML output of the feedback results.
+	// */
+	// public function render_result($attributes)
+	// {
+	// $shortcode = new FeedbackShortcode();
+	// return $shortcode->render_feedback_results_shortcode($attributes);
+	// }
 
-	/**
-	 * Initialize required classes
-	 *
-	 * @return void
-	 */
-	public function init_classes() {
-		// plugin assets.
-		$this->container['assets'] = new Assets();
-
-		// frontend.
-		if ( $this->is_request( 'frontend' ) ) {
-			// shortcode.
-			$this->container['feedback_shortcode']            = new FeedbackShortcode();
-			$this->container['learndash_shortcode']           = new LearnDash();
-			$this->container['learndash_dashboard_shortcode'] = new Dashboard();
-			$this->container['announcements']                 = new Announcements();
-		}
-
-		if ( $this->is_request( 'ajax' ) ) {
-			$this->container['feedback_ajax'] = new \Jamrock\Ajax\Feedback();
-		}
-	}
 
 	/**
 	 * Check the current request type.

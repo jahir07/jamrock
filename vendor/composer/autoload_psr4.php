@@ -7,7 +7,9 @@ $baseDir = dirname($vendorDir);
 
 return array(
     'Jamrock\\Shortcodes\\' => array($baseDir . '/shortcodes'),
+    'Jamrock\\Services\\' => array($baseDir . '/services'),
     'Jamrock\\Core\\' => array($baseDir . '/core'),
     'Jamrock\\Controllers\\' => array($baseDir . '/controllers'),
+    'Jamrock\\CLI\\' => array($baseDir . '/cli'),
     'Jamrock\\Ajax\\' => array($baseDir . '/ajax'),
 );

@@ -85,9 +85,11 @@
   }
 
   // Initial result load
-  const urlParams = new URLSearchParams(window.location.search);
-  const currentPage = urlParams.get("cpage") || 1;
-  loadAjaxResult(currentPage);
+  if ($('.jamrock-feedback-results').length) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentPage = urlParams.get("cpage") || 1;
+    loadAjaxResult(currentPage);
+  }
 
   /**
    * Load result details by ID.

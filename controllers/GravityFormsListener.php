@@ -3,81 +3,112 @@
  * Gravity Forms Listener.
  *
  * Listens to Gravity Forms submissions and upserts applicants into the
- * wp_jamrock_applicants table.
+ * {prefix}jamrock_applicants table using email as the lookup key.
  *
  * @package Jamrock
  * @since   1.0.0
  */
+
 namespace Jamrock\Controllers;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Listens to Gravity Forms submissions and upserts into wp_jamrock_applicants.
+ * Class GravityFormsListener
+ *
+ * Binds a form-specific Gravity Forms submission hook and performs
+ * an upsert into the applicants table. Keeps a reference to the
+ * created/updated applicant via GF entry meta (jamrock_applicant_id).
+ *
+ * @since 1.0.0
  */
 class GravityFormsListener {
 
 
 	/**
 	 * Wire up WordPress hooks.
+	 *
+	 * Binds to a form-specific GF hook if a Form ID is configured,
+	 * otherwise does nothing.
+	 *
+	 * @return void
 	 */
 	public function hooks(): void {
-		add_action( 'gform_after_submission', array( $this, 'handle_submission' ), 10, 2 );
+		// Ensure GF helper functions exist.
+		if ( ! function_exists( 'rgar' ) ) {
+			return;
+		}
+
+		$form_id = (int) get_option( 'jrj_form_id', 0 );
+		if ( $form_id <= 0 ) {
+			return;
+		}
+
+		// Bind only the configured form id to avoid firing on every form.
+		add_action( "gform_after_submission_{$form_id}", array( $this, 'handle_submission' ), 10, 2 );
 	}
 
 	/**
 	 * Handle a GF entry; upsert into jamrock_applicants using email as the lookup key.
 	 *
-	 * @param array $entry Gravity Forms entry.
+	 * @param array $entry Gravity Forms entry array.
 	 * @param array $form  Gravity Forms form meta.
+	 * @return void
 	 */
 	public function handle_submission( $entry, $form ): void {
-		$target_form_id = (int) get_option( 'jrj_form_id', 0 );
-		if ( ! $target_form_id || (int) rgar( $entry, 'form_id' ) !== $target_form_id ) {
-			return;
-		}
-
-		// ---- Extract fields (best-effort: by type/label). Adjust ids later if you add explicit mapping.
 		$email      = '';
 		$first_name = '';
 		$last_name  = '';
 		$phone      = '';
 
-		foreach ( $form['fields'] as $field ) {
-			$id = (string) $field->id;
+		// Extract fields in a "best effort" way by type/label so it works with common GF setups.
+		if ( is_array( $form['fields'] ?? null ) ) {
+			foreach ( $form['fields'] as $field ) {
+				$field_id    = (string) ( $field->id ?? '' );
+				$field_type  = (string) ( $field->type ?? '' );
+				$field_label = (string) ( $field->label ?? '' );
 
-			// Email
-			if ( ! $email && 'email' === $field->type ) {
-				$email = sanitize_email( rgar( $entry, $id ) );
-			}
-
-			// Name field (GF composite)
-			if ( 'name' === $field->type ) {
-				$first_name = $first_name ?: sanitize_text_field( rgar( $entry, $id . '.3' ) ); // first
-				$last_name  = $last_name ?: sanitize_text_field( rgar( $entry, $id . '.6' ) ); // last
-			} else {
-				// Fallback: text fields with labels containing "first"/"last"
-				if ( ! $first_name && false !== stripos( $field->label, 'first' ) ) {
-					$first_name = sanitize_text_field( rgar( $entry, $id ) );
+				// Email by field type.
+				if ( ! $email && 'email' === $field_type ) {
+					$email = sanitize_email( (string) rgar( $entry, $field_id ) );
 				}
-				if ( ! $last_name && false !== stripos( $field->label, 'last' ) ) {
-					$last_name = sanitize_text_field( rgar( $entry, $id ) );
-				}
-			}
 
-			// Phone (by type/label)
-			if ( ! $phone && ( 'phone' === $field->type || false !== stripos( $field->label, 'phone' ) ) ) {
-				$phone = sanitize_text_field( rgar( $entry, $id ) );
+				// Name (composite) — GF stores first at .3 and last at .6 by default.
+				if ( 'name' === $field_type ) {
+					if ( ! $first_name ) {
+						$first_name = sanitize_text_field( (string) rgar( $entry, $field_id . '.3' ) );
+					}
+					if ( ! $last_name ) {
+						$last_name = sanitize_text_field( (string) rgar( $entry, $field_id . '.6' ) );
+					}
+				} else {
+					// Fallback plain text fields by label.
+					if ( ! $first_name && false !== stripos( $field_label, 'first' ) ) {
+						$first_name = sanitize_text_field( (string) rgar( $entry, $field_id ) );
+					}
+					if ( ! $last_name && false !== stripos( $field_label, 'last' ) ) {
+						$last_name = sanitize_text_field( (string) rgar( $entry, $field_id ) );
+					}
+				}
+
+				// Phone by type or label.
+				if ( ! $phone && ( 'phone' === $field_type || false !== stripos( $field_label, 'phone' ) ) ) {
+					$phone = sanitize_text_field( (string) rgar( $entry, $field_id ) );
+				}
 			}
 		}
 
-		if ( ! $email ) {
+		// Fall back: if your form uses fixed IDs, uncomment and adjust:
+		// $first_name = $first_name ?: sanitize_text_field( (string) rgar( $entry, 1 ) );
+		// $email      = $email ?: sanitize_email( (string) rgar( $entry, 3 ) );
+
+		if ( '' === $email || ! is_email( $email ) ) {
 			if ( function_exists( 'jamrock_log' ) ) {
 				jamrock_log(
 					'gf_missing_email',
 					array(
-						'form_id'  => $target_form_id,
-						'entry_id' => rgar( $entry, 'id' ),
+						'form_id'  => (int) rgar( $entry, 'form_id' ),
+						'entry_id' => (int) rgar( $entry, 'id' ),
 					)
 				);
 			}
@@ -86,46 +117,69 @@ class GravityFormsListener {
 
 		global $wpdb;
 		$table = $wpdb->prefix . 'jamrock_applicants';
+		$now   = current_time( 'mysql' );
 
-		// Look up by email (your schema has KEY email; unique-by-email is optional but recommended).
+		// Lookup existing by email.
 		$applicant_id = (int) $wpdb->get_var(
 			$wpdb->prepare( "SELECT id FROM {$table} WHERE email = %s LIMIT 1", $email )
 		);
 
-		$now = current_time( 'mysql' );
-
 		if ( $applicant_id ) {
-			// Update existing.
+			// Update minimal profile fields and timestamp.
 			$data = array(
-				'first_name' => $first_name ?: '',
-				'last_name'  => $last_name ?: '',
-				'phone'      => $phone ?: '',
+				'first_name' => $first_name,
+				'last_name'  => $last_name,
+				'phone'      => $phone,
 				'updated_at' => $now,
 			);
-			$wpdb->update( $table, $data, array( 'id' => $applicant_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->update( $table, $data, array( 'id' => $applicant_id ) );
 		} else {
-			// Insert new with a UUID for jamrock_user_id and default status/score.
+			// Insert new with UUID + defaults.
 			$data = array(
 				'jamrock_user_id' => function_exists( 'wp_generate_uuid4' ) ? wp_generate_uuid4() : self::uuid4_fallback(),
-				'first_name'      => $first_name ?: '',
-				'last_name'       => $last_name ?: '',
+				'first_name'      => $first_name,
+				'last_name'       => $last_name,
 				'email'           => $email,
-				'phone'           => $phone ?: '',
+				'phone'           => $phone,
 				'status'          => 'applied',
 				'score_total'     => 0,
 				'created_at'      => $now,
 				'updated_at'      => $now,
 			);
-			$wpdb->insert( $table, $data ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->insert( $table, $data );
 			$applicant_id = (int) $wpdb->insert_id;
 		}
 
-		// Fire your internal hook for other automations (optional).
+		// Store a backlink to the applicant on the GF entry for later use.
+		if ( function_exists( 'gform_update_meta' ) ) {
+			gform_update_meta( (int) rgar( $entry, 'id' ), 'jamrock_applicant_id', (string) $applicant_id );
+		}
+
+		/**
+		 * Fire an internal hook so other modules (announcements, CRM, etc.) can react.
+		 *
+		 * @param string $email Applicant email.
+		 * @param int    $applicant_id Internal applicant ID.
+		 */
 		do_action( 'jamrock_applicant_upserted', $email, $applicant_id );
+
+		if ( function_exists( 'jamrock_log' ) ) {
+			jamrock_log(
+				'gf_applicant_upserted',
+				array(
+					'applicant_id' => $applicant_id,
+					'email'        => $email,
+				)
+			);
+		}
 	}
 
 	/**
 	 * Tiny UUIDv4 fallback if wp_generate_uuid4() is unavailable.
+	 *
+	 * @return string UUID v4 string.
 	 */
 	private static function uuid4_fallback(): string {
 		$data    = random_bytes( 16 );

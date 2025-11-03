@@ -485,6 +485,56 @@
   padding: 10px 0;
 }
 
+.jrj-step {
+  max-width: 1100px;
+  margin: 20px auto;
+  padding: 0 10px;
+}
+
+.jrj-breadcrumb {
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.jrj-note {
+  font-size: 14px;
+  color: #666;
+  margin: 8px 0 16px;
+}
+
+#jrj-iframe-wrap {
+  position: relative;
+}
+
+#jrj-iframe-wrap .loader {
+  display: none;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.6);
+  font-weight: 600;
+}
+
+#jrj-iframe-wrap.loading .loader {
+  display: flex;
+}
+
+iframe.jrj-psym {
+  width: 100%;
+  min-height: 110vh;
+  border: 0;
+  background: #fff;
+}
+
+.jrj-err {
+  background: #fff3cd;
+  color: #7a5d00;
+  padding: 12px;
+  border-radius: 6px;
+  margin: 8px 0;
+}
+
 /* ------------------ Feedback ------------------ */
 .feedback-area h3 {
   font-size: 1.4em;

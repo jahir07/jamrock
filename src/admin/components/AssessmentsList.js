@@ -23,7 +23,7 @@ export default {
 
     const today = new Date();
     const startDefault = new Date(today);
-    startDefault.setDate(startDefault.getDate() - 30);
+    startDefault.setDate(startDefault.getDate() - 10);
 
     const dates = reactive({
       start: fmt(startDefault),
@@ -61,6 +61,8 @@ export default {
           candidness: filter.candidness || "",
         });
         const data = await getJSON("assessments?" + q.toString());
+        console.log(data);
+        
         items.value = data.items || [];
         total.value = data.total || 0;
       } catch (e) {
@@ -132,6 +134,7 @@ export default {
       <label>Candidness
         <select v-model="filter.candidness" @change="page=1; load()">
           <option value="">All</option>
+          <option value="completed">Completed</option>
           <option value="cleared">cleared</option>
           <option value="flagged">flagged</option>
           <option value="pending">pending</option>
@@ -166,6 +169,7 @@ export default {
           <th>Applicant</th>
           <th>Email</th>
           <th>Provider</th>
+          <th>Assessment url</th>
           <th>Score</th>
           <th>Candidness</th>
           <!-- <th>Completed</th> -->
@@ -178,6 +182,7 @@ export default {
           <td>{{ r.first_name }} {{ r.last_name }}</td>
           <td>{{ r.email }}</td>
           <td>{{ r.provider }}</td>
+          <td>{{ r.assessment_url }}</td>
           <td>{{ r.overall_score ?? '-' }}</td>
           <td>{{ r.candidness === 'pending' ? 'Awaiting Results' : r.candidness }}</td>
           <!-- <td>{{ r.completed_at || '-' }}</td> -->
