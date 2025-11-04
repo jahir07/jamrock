@@ -80,9 +80,11 @@ class Settings {
 		}
 
 		$data = array(
-			'form_id'     => (int) get_option( 'jrj_form_id', 0 ),
-			'api_key'     => (string) get_option( 'jrj_api_key', '' ),
-			'callback_ok' => (string) get_option( 'jrj_callback_ok', '' ),
+			'form_id'             => (int) get_option( 'jrj_form_id', 0 ),
+			'api_key'             => (string) get_option( 'jrj_api_key', '' ),
+			'callback_ok'         => (string) get_option( 'jrj_callback_ok', '' ),
+			'set_login_page'      => (string) get_option( 'jrj_set_login_page', '' ),
+			'set_assessment_page' => (string) get_option( 'jrj_set_assessment_page', '' ),
 		);
 
 		// Send as clean JSON with proper headers and exit.
@@ -103,6 +105,8 @@ class Settings {
 		update_option( 'jrj_form_id', absint( $params['form_id'] ?? 0 ) );
 		update_option( 'jrj_api_key', sanitize_text_field( $params['api_key'] ?? '' ) );
 		update_option( 'jrj_callback_ok', esc_url_raw( $params['callback_ok'] ?? '' ) );
+		update_option( 'jrj_set_login_page', sanitize_text_field( $params['set_login_page'] ?? '' ) );
+		update_option( 'jrj_set_assessment_page', sanitize_text_field( $params['set_assessment_page'] ?? '' ) );
 
 		return rest_ensure_response(
 			array(

@@ -20428,8 +20428,6 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue/dist/vue.esm-bundler.js */ "../../node_modules/.pnpm/vue@3.5.22_typescript@5.9.3/node_modules/vue/dist/vue.esm-bundler.js");
 /* global JRJ_DASH */
 
-// import { createApp, ref, onMounted, computed } from "vue";
-
 const fetchJSON = async path => {
   const res = await fetch(JRJ_DASH.root + path, {
     headers: {
@@ -20678,9 +20676,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Initial result load
-  const urlParams = new URLSearchParams(window.location.search);
-  const currentPage = urlParams.get("cpage") || 1;
-  loadAjaxResult(currentPage);
+  if ($('.jamrock-feedback-results').length) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentPage = urlParams.get("cpage") || 1;
+    loadAjaxResult(currentPage);
+  }
 
   /**
    * Load result details by ID.

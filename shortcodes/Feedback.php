@@ -20,10 +20,10 @@ class Feedback {
 	/**
 	 * Register shortcodes on initialization.
 	 */
-	public function __construct() {
+	public static function register(): void {
 		// Feedback form and results shortcodes.
-		add_shortcode( 'jamrock_feedback_form', array( $this, 'render_feedback_form_shortcode' ) );
-		add_shortcode( 'jamrock_feedback_results', array( $this, 'render_feedback_results_shortcode' ) );
+		add_shortcode( 'jamrock_feedback_form', array( __CLASS__, 'render_feedback_form_shortcode' ) );
+		add_shortcode( 'jamrock_feedback_results', array( __CLASS__, 'render_feedback_results_shortcode' ) );
 	}
 
 	/**
@@ -35,7 +35,7 @@ class Feedback {
 	 * @param array $atts    Shortcode attributes.
 	 * @return string Rendered HTML form.
 	 */
-	public function render_feedback_form_shortcode( $atts ): string {
+	public static function render_feedback_form_shortcode( $atts ): string {
 		$defaults = array(
 			'title' => esc_html__( 'Submit your feedback', 'jamrock' ),
 		);

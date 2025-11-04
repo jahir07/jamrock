@@ -94,6 +94,17 @@ class Applicants {
 		);
 
 		$rows = $wpdb->get_results( $sql_rows, ARRAY_A ) ?: array();
+		$form_ids = $this->get_form_ids(); // ['physical'=>2,'skills'=>3,'medical'=>4]
+
+		// applicant - chk GF form entries.
+		foreach ($rows as &$r) {
+			$email = (string) ($r['email'] ?? '');
+
+			$r['has_physical'] = $this->has_entry_for_email($form_ids['physical'], $email);
+			$r['has_skills'] = $this->has_entry_for_email($form_ids['skills'], $email);
+			$r['has_medical'] = $this->has_entry_for_email($form_ids['medical'], $email);
+		}
+		unset($r);
 
 		return rest_ensure_response(
 			array(
@@ -101,5 +112,69 @@ class Applicants {
 				'total' => $total,
 			)
 		);
+	}
+
+	/**
+	 * Get form IDs from options.
+	 *
+	 * @return array<string, int> Associative array of form IDs.
+	 */
+	private function get_form_ids(): array
+	{
+		return array(
+			'physical' => (int) get_option('jrj_form_physical_id', 0) ?: 2,
+			'skills' => (int) get_option('jrj_form_skills_id', 0) ?: 3,
+			'medical' => (int) get_option('jrj_form_medical_id', 0) ?: 4,
+		);
+	}
+
+	/**
+	 * Does a Gravity Forms entry exist for this form & email?
+	 * Uses GFAPI when available; otherwise a safe SQL fallback.
+	 */
+	private function has_entry_for_email(int $form_id, string $email): bool
+	{
+		if ($form_id <= 0 || !is_email($email)) {
+			return false;
+		}
+
+		// Prefer GFAPI (field id 2 = applicant_email with inputName='applicant_email')
+		if (class_exists('\GFAPI')) {
+			$search = array(
+				'status' => 'active',
+				'field_filters' => array(
+					'mode' => 'all',
+					array(
+						'key' => '2',        // email field id
+						'value' => $email,
+					),
+				),
+			);
+			$sorting = array('key' => 'id', 'direction' => 'DESC', 'type' => 'numeric');
+			$paging = array('offset' => 0, 'page_size' => 1);
+			$list = \GFAPI::get_entries($form_id, $search, $sorting, $paging);
+			return is_array($list) && !empty($list);
+		}
+
+		// Fallback SQL against GF tables if GFAPI unavailable
+		global $wpdb;
+		$e = $wpdb->prefix . 'gf_entry';
+		$em = $wpdb->prefix . 'gf_entry_meta';
+		// meta_key '2' holds field id 2 (applicant_email)
+		$sql = $wpdb->prepare(
+			"SELECT e.id
+			   FROM {$e} e
+			   JOIN {$em} m ON m.entry_id = e.id
+			  WHERE e.form_id = %d
+			    AND m.meta_key = %s
+			    AND m.meta_value = %s
+			  ORDER BY e.id DESC
+			  LIMIT 1",
+			$form_id,
+			'2',
+			$email
+		);
+		$entry_id = (int) $wpdb->get_var($sql);
+		return $entry_id > 0;
 	}
 }

@@ -5,7 +5,6 @@ import {
   onMounted,
   computed,
 } from "vue/dist/vue.esm-bundler.js";
-// import { createApp, ref, onMounted, computed } from "vue";
 
 const fetchJSON = async (path) => {
   const res = await fetch(JRJ_DASH.root + path, {

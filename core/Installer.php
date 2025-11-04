@@ -52,10 +52,14 @@ class Installer {
 	 */
 	protected function create_applicants_table(): void {
 		global $wpdb;
-		$table   = $wpdb->prefix . 'jamrock_applicants';
-		$charset = $wpdb->get_charset_collate();
 
-		$sql = "CREATE TABLE {$table} (
+		$charset    = $wpdb->get_charset_collate();
+		$applicants = "{$wpdb->prefix}jamrock_applicants";
+		$composites = "{$wpdb->prefix}jamrock_applicant_composites";
+		$history    = "{$wpdb->prefix}jamrock_applicant_composite_history";
+
+		// Anchor table: applicants.
+		$sql_applicants = "CREATE TABLE {$applicants} (
 			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			jamrock_user_id CHAR(36) NOT NULL,
 			first_name VARCHAR(100) NOT NULL,
@@ -68,10 +72,50 @@ class Installer {
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			PRIMARY KEY (id),
 			UNIQUE KEY jamrock_user_id (jamrock_user_id),
-			KEY email (email)
+			UNIQUE KEY email (email),
+			KEY status (status),
+			KEY updated_at (updated_at)
 		) {$charset};";
 
-		dbDelta( $sql );
+		// Latest composite snapshot per applicant.
+		$sql_composites = "CREATE TABLE {$composites} (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			applicant_id BIGINT(20) UNSIGNED NOT NULL,
+			status_flag ENUM('ok','provisional','hold','disqualified','pending') NOT NULL DEFAULT 'pending',
+			composite DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+			grade CHAR(1) NOT NULL DEFAULT 'D',
+			weights_json LONGTEXT NULL,
+			thresholds_json LONGTEXT NULL,
+			formula_version VARCHAR(20) NOT NULL DEFAULT 'v1',
+			components_json LONGTEXT NULL,
+			computed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			UNIQUE KEY applicant (applicant_id),
+			KEY computed_at (computed_at)
+		) {$charset};";
+
+		// Composite audit history.
+		$sql_history = "CREATE TABLE {$history} (
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			applicant_id BIGINT(20) UNSIGNED NOT NULL,
+			status_flag ENUM('ok','provisional','hold','disqualified','pending') NOT NULL DEFAULT 'pending',
+			composite DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+			grade CHAR(1) NOT NULL DEFAULT 'D',
+			weights_json LONGTEXT NULL,
+			thresholds_json LONGTEXT NULL,
+			formula_version VARCHAR(20) NOT NULL DEFAULT 'v1',
+			components_json LONGTEXT NULL,
+			computed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (id),
+			KEY applicant_id (applicant_id),
+			KEY computed_at (computed_at)
+		) {$charset};";
+
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		dbDelta( $sql_applicants );
+		dbDelta( $sql_composites );
+		dbDelta( $sql_history );
 	}
 
 	/**
@@ -83,26 +127,27 @@ class Installer {
 		$charset = $wpdb->get_charset_collate();
 
 		$sql = "CREATE TABLE {$table} (
-		id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-		applicant_id BIGINT(20) UNSIGNED DEFAULT NULL,
-		provider VARCHAR(50) NOT NULL,
-		external_id VARCHAR(100) DEFAULT NULL,
-		email VARCHAR(190) DEFAULT NULL,
-		overall_score FLOAT DEFAULT NULL,
-		candidness ENUM('cleared','flagged','pending','invalid') DEFAULT 'pending',
-		details_json LONGTEXT DEFAULT NULL,
-		payload_json LONGTEXT DEFAULT NULL,
-		completed_at DATETIME DEFAULT NULL,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-		PRIMARY KEY  (id),
-		KEY applicant_id (applicant_id),
-		KEY provider (provider),
-		KEY external_id (external_id),
-		KEY email (email)
-	) {$charset};";
+			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			applicant_id BIGINT(20) UNSIGNED DEFAULT NULL,
+			provider VARCHAR(50) NOT NULL,
+			external_id VARCHAR(100) DEFAULT NULL,
+			assessment_url TEXT NULL,
+			email VARCHAR(190) DEFAULT NULL,
+			overall_score FLOAT DEFAULT NULL,
+			candidness ENUM('completed','flagged','pending','invalid') DEFAULT 'pending',
+			details_json LONGTEXT DEFAULT NULL,
+			payload_json LONGTEXT DEFAULT NULL,
+			completed_at DATETIME DEFAULT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id),
+			UNIQUE KEY jamrock_provider_external (provider, external_id),
+			KEY applicant_id (applicant_id),
+			KEY provider (provider),
+			KEY external_id (external_id),
+			KEY email (email)
+		) {$charset};";
 
-		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
 	}
 

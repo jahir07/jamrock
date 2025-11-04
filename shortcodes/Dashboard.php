@@ -34,19 +34,6 @@ class Dashboard {
 			return '<p>You need to be signed in to view your training dashboard.</p>';
 		}
 
-		// Localize REST root + nonce for the app.
-		// wp_enqueue_script('jamrock-dashboard');
-		// wp_localize_script(
-		// 'jamrock-frontend',
-		// 'JRJ_DASH',
-		// array(
-		// 'root' => esc_url_raw(rest_url('jamrock/v1/')),
-		// 'nonce' => wp_create_nonce('wp_rest'),
-		// )
-		// );
-
-		// wp_register_script('jrj-dash-boot', false, [], null, true);
-		// wp_enqueue_script('jrj-dash-boot');
 		wp_add_inline_script(
 			'jamrock-frontend',
 			'window.JRJ_DASH = ' . wp_json_encode(

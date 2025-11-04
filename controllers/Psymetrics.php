@@ -28,7 +28,6 @@ class Psymetrics {
 	 */
 	public function hooks(): void {
 		add_action( 'rest_api_init', array( $this, 'routes' ) );
-		add_action( 'init', array( $this, 'bind_gf_hooks' ) );
 	}
 
 	/**
@@ -58,23 +57,6 @@ class Psymetrics {
 					return current_user_can( 'manage_options' );
 				},
 				'callback'            => array( $this, 'sync' ),
-			)
-		);
-
-		register_rest_route(
-			'jamrock/v1',
-			'/entry/(?P<id>\d+)/psymetrics-url',
-			array(
-				'methods' => 'GET',
-				'permission_callback' => '__return_true', // It only reveals a redirect URL, safe enough; tighten if needed.
-				'callback' => function (\WP_REST_Request $req) {
-					$entry_id = (int) $req['id'];
-					if ($entry_id <= 0) {
-						return rest_ensure_response(array('url' => ''));
-					}
-					$url = (string) gform_get_meta($entry_id, 'psymetrics_candidate_url');
-					return rest_ensure_response(array('url' => esc_url_raw($url)));
-				},
 			)
 		);
 	}
@@ -143,7 +125,7 @@ class Psymetrics {
 	 * @return \WP_REST_Response
 	 */
 	public function sync( \WP_REST_Request $req ) {
-		$start = sanitize_text_field( (string) ( $req->get_param( 'start' ) ?: gmdate( 'Y-m-d', strtotime( '-30 days' ) ) ) );
+		$start = sanitize_text_field( (string) ( $req->get_param( 'start' ) ?: gmdate( 'Y-m-d', strtotime( '-10 days' ) ) ) );
 		$end   = sanitize_text_field( (string) ( $req->get_param( 'end' ) ?: gmdate( 'Y-m-d' ) ) );
 
 		// Note: Using "jrj_api_key" as "Psymetrics-Secret" header (per your settings page).
@@ -205,6 +187,20 @@ class Psymetrics {
 		$normalized = $this->normalize_psymetrics_list( $decoded );
 		$imported   = $this->upsert_psymetrics( $normalized );
 
+		$guids = array_values(
+			array_filter(
+				array_map(
+					static function ( $r ) {
+						return $r['external_id'] ?? ''; },
+					$normalized
+				)
+			)
+		);
+
+		if ( ! empty( $guids ) ) {
+			$this->refresh_psymetrics_scores_chunked( $guids, 10, 100 ); // প্রতি ব্যাচে 10 টি, প্রতিটি আইটেমের মাঝে ~100ms।
+		}
+
 		/**
 		 * Fires after a manual sync pull completes.
 		 *
@@ -229,33 +225,48 @@ class Psymetrics {
 
 	/**
 	 * Normalize Psymetrics LIST payload into our internal row shape.
-	 * Expected input:
-	 * {
-	 *   "record_count": N,
-	 *   "data": [
-	 *     { "guid": "...", "status": "COMPLETED", "candidate": { "email": "...", ... }, ... }
-	 *   ]
-	 * }
 	 *
 	 * @param array $decoded API decoded array.
 	 * @return array[] Each row: [provider, external_id, email, overall_score(null), candidness('pending'), completed_at|null]
 	 */
 	private function normalize_psymetrics_list( array $decoded ): array {
 		$out  = array();
-		$list = isset( $decoded['data'] ) && is_array( $decoded['data'] ) ? $decoded['data'] : array();
+		$list = ( isset( $decoded['data'] ) && is_array( $decoded['data'] ) ) ? $decoded['data'] : array();
 
 		foreach ( $list as $item ) {
-			$guid   = isset( $item['guid'] ) ? (string) $item['guid'] : '';
-			$email  = isset( $item['candidate']['email'] ) ? sanitize_email( (string) $item['candidate']['email'] ) : '';
-			$status = isset( $item['status'] ) ? strtoupper( (string) $item['status'] ) : '';
+			$guid       = isset( $item['guid'] ) ? (string) $item['guid'] : '';
+			$status_raw = isset( $item['status'] ) ? (string) $item['status'] : '';
+			$status     = strtoupper( trim( $status_raw ) );
+
+			$assessment_url = isset( $item['assessment_url'] ) ? esc_url_raw( $item['assessment_url'] ) : '';
+
+			$candidate       = ( isset( $item['candidate'] ) && is_array( $item['candidate'] ) ) ? $item['candidate'] : array();
+			$candidate_first = isset( $candidate['first_name'] ) ? sanitize_text_field( $candidate['first_name'] ) : '';
+			$candidate_last  = isset( $candidate['last_name'] ) ? sanitize_text_field( $candidate['last_name'] ) : '';
+			$candidate_email = isset( $candidate['email'] ) ? sanitize_email( $candidate['email'] ) : '';
+			$candidate_role  = isset( $candidate['job_position'] ) ? sanitize_text_field( $candidate['job_position'] ) : '';
+
+			$details = array(
+				'candidate'    => array(
+					'first_name'   => $candidate_first,
+					'last_name'    => $candidate_last,
+					'email'        => $candidate_email,
+					'job_position' => $candidate_role,
+				),
+				'prebuilts'    => ( isset( $item['prebuilts'] ) && is_array( $item['prebuilts'] ) ) ? $item['prebuilts'] : array(),
+				'custombuilts' => ( isset( $item['custombuilts'] ) && is_array( $item['custombuilts'] ) ) ? $item['custombuilts'] : array(),
+			);
 
 			$out[] = array(
-				'provider'      => 'psymetrics',
-				'external_id'   => $guid,
-				'email'         => $email,
-				'overall_score' => null, // not provided by list API
-				'candidness'    => 'pending',
-				'completed_at'  => ( 'COMPLETED' === $status ) ? current_time( 'mysql' ) : null,
+				'provider'       => 'psymetrics',
+				'external_id'    => $guid,
+				'email'          => $candidate_email,
+				'assessment_url' => $assessment_url,
+				'details_json'   => wp_json_encode( $details ),
+				'payload_json'   => wp_json_encode( $item ), // todo webhook/detail can fill later.
+				'overall_score'  => null,
+				'candidness'     => ( 'COMPLETED' === $status ) ? 'completed' : 'pending',
+				'completed_at'   => ( 'COMPLETED' === $status ) ? current_time( 'mysql' ) : null,
 			);
 		}
 
@@ -276,12 +287,12 @@ class Psymetrics {
 
 		foreach ( $rows as $r ) {
 			$email   = sanitize_email( $r['email'] ?? '' );
-			$score   = array_key_exists( 'overall_score', $r ) && null !== $r['overall_score'] ? (float) $r['overall_score'] : null;
+			$score   = isset( $r['overall_score'] ) && null !== $r['overall_score'] ? (float) $r['overall_score'] : null;
 			$cand    = $r['candidness'] ?? 'pending';
 			$done_at = ! empty( $r['completed_at'] ) ? sanitize_text_field( (string) $r['completed_at'] ) : null;
 			$ext_id  = sanitize_text_field( (string) ( $r['external_id'] ?? '' ) );
 
-			// Find applicant by email (created via GF submission).
+			// Find applicant by email (if exists)
 			$applicant_id = $email
 				? (int) $wpdb->get_var(
 					$wpdb->prepare(
@@ -289,44 +300,49 @@ class Psymetrics {
 						$email
 					)
 				)
-				: 0; // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				: 0;
 
-			// Upsert by (provider, external_id).
-			$existing = (int) $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT id FROM $t WHERE provider = %s AND external_id = %s LIMIT 1",
-					'psymetrics',
-					$ext_id
+			// Use REPLACE to upsert by unique (provider, external_id).
+			$ok = $wpdb->replace(
+				$t,
+				array(
+					'provider'       => 'psymetrics',
+					'external_id'    => $ext_id,
+					'applicant_id'   => $applicant_id,
+					'email'          => $email,
+					'assessment_url' => $r['assessment_url'] ?? '',
+					'details_json'   => $r['details_json'] ?? null,
+					'payload_json'   => $r['payload_json'] ?? null,
+					'overall_score'  => $score,
+					'candidness'     => $cand ?: 'pending',
+					'completed_at'   => $done_at,
+					'created_at'     => current_time( 'mysql' ),
+					'updated_at'     => current_time( 'mysql' ),
+				),
+				array(
+					'%s',
+					'%s',
+					'%d',
+					'%s',
+					'%s',
+					'%s',
+					'%s',
+					'%f',
+					'%s',
+					'%s',
+					'%s',
+					'%s',
 				)
-			); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
-
-			$data = array(
-				'provider'      => 'psymetrics',
-				'external_id'   => $ext_id,
-				'applicant_id'  => $applicant_id,
-				'email'         => $email,
-				'overall_score' => $score,
-				'candidness'    => $cand ?: 'pending',
-				'completed_at'  => $done_at,
-				'created_at'    => current_time( 'mysql' ),
-				'updated_at'    => current_time( 'mysql' ),
 			);
-
-			if ( $existing ) {
-				unset( $data['created_at'] );
-				$ok = $wpdb->update( $t, $data, array( 'id' => $existing ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			} else {
-				$ok = $wpdb->insert( $t, $data ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			}
 
 			if ( false !== $ok ) {
 				++$count;
 
-				// Only fire completion/knockout when we have decisive data.
-				if ( in_array( $data['candidness'], array( 'invalid', 'flagged' ), true ) ) {
+				// Trigger hooks only when meaningful.
+				if ( in_array( $cand, array( 'invalid', 'flagged' ), true ) ) {
 					do_action( 'jamrock_psymetrics_knockout', $email, array( 'reason' => 'validity' ) );
-				} elseif ( null !== $data['overall_score'] ) {
-					do_action( 'jamrock_psymetrics_completed', $email, (float) $data['overall_score'], $done_at );
+				} elseif ( null !== $score ) {
+					do_action( 'jamrock_psymetrics_completed', $email, (float) $score, $done_at );
 				}
 			}
 		}
@@ -335,258 +351,123 @@ class Psymetrics {
 	}
 
 	/**
-	 * Bind Gravity Forms hooks if GF is active and a form ID is set in options.
-	 */
-	public function bind_gf_hooks(): void {
-		if ( ! function_exists( 'rgar' ) ) {
-			// Gravity Forms not active.
-			return;
-		}
-
-		$form_id = (int) get_option( 'jrj_form_id', 0 );
-		if ( 0 === $form_id ) {
-			return;
-		}
-
-		add_action( "gform_after_submission_{$form_id}", array( $this, 'create_assessment' ), 10, 2 );
-		add_filter( "gform_confirmation_{$form_id}", array( $this, 'maybe_redirect' ), 10, 3 );
-	}
-
-	/**
-	 * Create assessment via Psymetrics /integration/v1/register/ and store redirect URL in entry meta.
+	 * Fetch a single Psymetrics result by GUID and normalize it for upsert.
 	 *
-	 * @param array $entry Gravity Forms entry.
-	 * @param array $form  Gravity Forms form (unused).
+	 * @param string $guid
+	 * @return array|null Normalized row compatible with upsert_psymetrics(), or null on error.
 	 */
-	public function create_assessment( $entry, $form ): void {
-		unset( $form ); // keep signature for GF.
-
-		$api_secret = (string) get_option( 'jrj_api_secret', '' );
-		if ( '' === $api_secret ) {
-			return;
+	private function fetch_psymetrics_result_by_guid( string $guid ): ?array {
+		$guid = trim( $guid );
+		if ( '' === $guid ) {
+			return null;
 		}
 
-		$endpoint = 'https://api.psymetricstest.com/integration/v1/register/';
-
-		// Basic candidate info – adjust IDs to your form.
-		// $first_name = sanitize_text_field( (string) rgar( $entry, 1 ) );
-		// $last_name  = sanitize_text_field( (string) rgar( $entry, 2 ) );
-		// $email      = sanitize_email( (string) rgar( $entry, 3 ) );
-		// if ( '' === $email || ! is_email( $email ) ) {
-		// 	return;
-		// }
-
-		$first_name = sanitize_text_field((string) rgar($entry, 1));
-		$email = sanitize_email((string) rgar($entry, 3));
-
-		
-		$job_applying_for = sanitize_text_field( (string) rgar( $entry, 4 ) );
-		$lang             = sanitize_text_field( (string) rgar( $entry, 5 ) ); // en/sp optional
-		$redirect_url     = esc_url_raw( (string) rgar( $entry, 12 ) );
-		if ( '' === $redirect_url ) {
-			$redirect_url = home_url( '/thanks/' );
-		}
-
-		$report_version      = sanitize_text_field( (string) rgar( $entry, 13 ) ); // selection|development|selection_development
-		$add_id_verification = filter_var( rgar( $entry, 14 ), FILTER_VALIDATE_BOOLEAN );
-
-		// Test selection (choose exactly one family per API rules).
-		$prebuilt_raw = (string) rgar( $entry, 10 ); // comma-separated allowed
-		$osb_id_raw   = (string) rgar( $entry, 11 ); // one_score_battery_id
-
-		$prebuilt_ids = array();
-		if ( '' !== $prebuilt_raw ) {
-			$prebuilt_ids = array_filter(
-				array_map(
-					static function ( $v ) {
-						return (int) trim( $v );
-					},
-					explode( ',', $prebuilt_raw )
-				),
-				static function ( $v ) {
-					return $v > 0;
-				}
-			);
-		}
-		$one_score_battery_id = ( '' !== $osb_id_raw ) ? (int) $osb_id_raw : null;
-
-		$payload = array(
-			'first_name'          => $first_name,
-			'last_name'           => $last_name,
-			'email'               => $email,
-			'job_applying_for'    => ( '' !== $job_applying_for ) ? $job_applying_for : 'N/A',
-			'redirect_url'        => $redirect_url,
-			'lang'                => ( '' !== $lang ) ? $lang : 'en',
-			'add_id_verification' => (bool) $add_id_verification,
-		);
-
-		if ( in_array( $report_version, array( 'selection', 'development', 'selection_development' ), true ) ) {
-			$payload['report_version'] = $report_version;
-		}
-
-		// Enforce exclusivity for OSB vs prebuilts.
-		if ( $one_score_battery_id && ! empty( $prebuilt_ids ) ) {
-			$prebuilt_ids = array();
-		}
-
-		if ( $one_score_battery_id ) {
-			$payload['prebuilts']            = array();
-			$payload['custombuilts']         = array();
-			$payload['one_score_battery_id'] = (int) $one_score_battery_id;
-		} elseif ( ! empty( $prebuilt_ids ) ) {
-			$payload['prebuilts']            = array_map( 'intval', $prebuilt_ids );
-			$payload['custombuilts']         = array(); // optional, add if you use them
-			$payload['one_score_battery_id'] = null;
-		} else {
-			// No test specified → nothing to create.
-			return;
-		}
+		// Configure.
+		$secret = (string) get_option( 'jrj_api_key', '' );
+		$url    = 'https://api.psymetricstest.com/integration/v1/result/?guid=' . rawurlencode( $guid );
 
 		$args = array(
-			'method'  => 'POST',
-			'timeout' => 20,
-			'headers' => array(
-				'Psymetrics-Secret' => $api_secret,
-				'Content-Type'      => 'application/json',
-				'Accept'            => 'application/json',
-			),
-			'body'    => wp_json_encode( $payload ),
+			'headers'   => array( 'Psymetrics-Secret' => $secret ),
+			'timeout'   => 15,
+			'sslverify' => true,
 		);
 
-		$response = wp_remote_post( $endpoint, $args );
-
-		if ( is_wp_error( $response ) ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( '[JAMROCK] psym_register_error ' . $response->get_error_message() );
-			return;
+		$r = wp_remote_get( $url, $args );
+		if ( is_wp_error( $r ) ) {
+			return null;
 		}
 
-		$code = (int) wp_remote_retrieve_response_code( $response );
-		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
-
-		
-		if ( $code >= 200 && $code < 300 && ! empty( $body['assessment_url'] ) ) {
-			$guid = isset( $body['guid'] ) ? sanitize_text_field( (string) $body['guid'] ) : '';
-			gform_update_meta( rgar( $entry, 'id' ), 'psymetrics_guid', $guid );
-			gform_update_meta( rgar( $entry, 'id' ), 'psymetrics_candidate_url', esc_url_raw( (string) $body['assessment_url'] ) );
-		} else {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log(
-				'[JAMROCK] psym_bad_response ' . wp_json_encode(
-					array(
-						'code' => $code,
-						'body' => $body,
-					)
-				)
-			);
+		$code = (int) wp_remote_retrieve_response_code( $r );
+		if ( $code < 200 || $code >= 300 ) {
+			return null;
 		}
+
+		$body = wp_remote_retrieve_body( $r );
+		$dec  = json_decode( $body, true );
+
+		if ( ! is_array( $dec ) || empty( $dec['success'] ) || empty( $dec['data'][0] ) || ! is_array( $dec['data'][0] ) ) {
+			return null;
+		}
+
+		$item = $dec['data'][0];
+
+		// Extract candidate block.
+		$cand      = isset( $item['candidate_info'] ) && is_array( $item['candidate_info'] ) ? $item['candidate_info'] : array();
+		$email     = isset( $cand['email'] ) ? sanitize_email( $cand['email'] ) : '';
+		$invited   = isset( $item['date_invited'] ) ? sanitize_text_field( (string) $item['date_invited'] ) : '';
+		$completed = isset( $item['date_completed'] ) ? sanitize_text_field( (string) $item['date_completed'] ) : '';
+		$score     = isset( $item['overall_score'] ) ? (float) $item['overall_score'] : null;
+
+		// Your list endpoint stored assessment_url earlier; keep it if present in DB.
+		global $wpdb;
+		$t                       = $wpdb->prefix . 'jamrock_assessments';
+		$existing_assessment_url = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT assessment_url FROM $t WHERE provider=%s AND external_id=%s LIMIT 1",
+				'psymetrics',
+				$guid
+			)
+		);
+
+		// Build details_json with rich context (keep raw flags for future).
+		$details = array(
+			'assessment'     => isset( $item['assessment'] ) ? sanitize_text_field( (string) $item['assessment'] ) : '',
+			'logo'           => isset( $item['logo'] ) ? esc_url_raw( (string) $item['logo'] ) : '',
+			'date_invited'   => $invited,
+			'candidness_raw' => isset( $item['candidness'] ) ? $item['candidness'] : null,
+			'candidate'      => array(
+				'first_name'       => isset( $cand['first_name'] ) ? sanitize_text_field( $cand['first_name'] ) : '',
+				'last_name'        => isset( $cand['last_name'] ) ? sanitize_text_field( $cand['last_name'] ) : '',
+				'email'            => $email,
+				'job_applying_for' => isset( $cand['job_applying_for'] ) ? sanitize_text_field( $cand['job_applying_for'] ) : '',
+			),
+			'score_details'  => isset( $item['score_details'] ) && is_array( $item['score_details'] ) ? $item['score_details'] : array(),
+		);
+
+		// Convert date_completed → MySQL DATETIME (server local time ok for you).
+		$completed_at = $completed ? date_i18n( 'Y-m-d H:i:s', strtotime( $completed ) ) : null;
+
+		// Map to your upsert schema
+		return array(
+			'provider'       => 'psymetrics',
+			'external_id'    => $guid,
+			'email'          => $email,
+			'assessment_url' => $existing_assessment_url ?: '',
+			'details_json'   => wp_json_encode( $details ),
+			'payload_json'   => wp_json_encode( $item ),
+			'overall_score'  => $score,
+			'candidness'     => $completed_at ? 'completed' : 'pending',
+			'completed_at'   => $completed_at,
+		);
 	}
 
 	/**
-	 * Redirect to assessment URL if available; otherwise show fallback message.
+	 * Refresh scores for a set of GUIDs by calling the result API.
 	 *
-	 * @param mixed $confirmation Confirmation.
-	 * @param array $form         Form (unused).
-	 * @param array $entry        Entry.
-	 * @return mixed
+	 * @param string[] $guids
+	 * @return int Number of successful upserts
 	 */
-	public function maybe_redirect( $confirmation, $form, $entry ) {
-		// unset( $form );
-		// $url = gform_get_meta( rgar( $entry, 'id' ), 'psymetrics_candidate_url' );
-		// if ( $url ) {
-		// 	return array( 'redirect' => esc_url_raw( $url ) );
-		// }
-		// return wpautop(
-		// 	esc_html__( 'Thanks! Your assessment link is being prepared. If not redirected shortly, please check your email.', 'jamrock' )
-		// );
-
-		unset( $form ); // not used here
-
-		$entry_id = (int) rgar( $entry, 'id' );
-		$url      = (string) gform_get_meta( $entry_id, 'psymetrics_candidate_url' );
-
-		// Basic styles so the frame looks clean
-		$styles = '<style>
-		.jrj-psym-wrap{max-width:1200px;margin:20px auto;padding:0 10px}
-		.jrj-psym-head{margin-bottom:10px}
-		.jrj-psym-iframe{width:100%;min-height:1200px;border:0;background:#fff}
-		.jrj-psym-note{font-size:14px;color:#666;margin:8px 0 16px}
-		.jrj-psym-btn{display:inline-block;padding:10px 14px;border-radius:6px;background:#111;color:#fff;text-decoration:none}
-		.jrj-psym-err{background:#fff3cd;color:#7a5d00;padding:12px;border-radius:6px;margin:8px 0}
-		</style>';
-
-		// If we already have the URL, render the iframe immediately.
-		if ( $url ) {
-			$html = sprintf(
-				'<div class="jrj-psym-wrap">
-				<div class="jrj-psym-head">
-					<h2>Assessment</h2>
-					<div class="jrj-psym-note">If the test does not load below (blocked by your browser), <a class="jrj-psym-btn" href="%1$s" target="_blank" rel="noopener">open in a new tab</a>.</div>
-				</div>
-				<iframe class="jrj-psym-iframe" src="%1$s" allow="fullscreen; geolocation; microphone; camera"></iframe>
-				</div>',
-				esc_url( $url )
-			);
-			return $styles . $html;
+	private function refresh_psymetrics_scores_chunked( array $guids, int $chunk_size = 10, int $delay_ms = 100 ): int {
+		$total = 0;
+		if ( empty( $guids ) ) {
+			return 0;
 		}
 
-		// Otherwise, show loader + script that polls a REST endpoint for a few seconds
-		$endpoint = esc_url_raw( rest_url( 'jamrock/v1/entry/' . $entry_id . '/psymetrics-url' ) );
-		$nonce    = wp_create_nonce( 'wp_rest' );
+		@set_time_limit( 0 );
 
-		$html = sprintf(
-			'<div class="jrj-psym-wrap" id="jrj-psym-root">
-			<div class="jrj-psym-head">
-				<h2>Preparing your assessment…</h2>
-				<p class="jrj-psym-note">This usually takes a moment. If not loaded automatically, you will see a button to open it in a new tab.</p>
-			</div>
-			<div class="jrj-psym-err" id="jrj-psym-msg" style="display:none"></div>
-			</div>
-			<script>
-			(function(){
-				const root = document.getElementById("jrj-psym-root");
-				const msg  = document.getElementById("jrj-psym-msg");
-				const endpoint = %1$s;
-				const headers = {"X-WP-Nonce": %2$s};
-				let tries = 0, maxTries = 10;
+		foreach ( array_chunk( $guids, $chunk_size ) as $batch ) {
+			foreach ( $batch as $guid ) {
+				$row = $this->fetch_psymetrics_result_by_guid( (string) $guid );
+				if ( $row ) {
+					$total += $this->upsert_psymetrics( array( $row ) );
+				}
+				if ( $delay_ms > 0 ) {
+					usleep( $delay_ms * 1000 );
+				}
+			}
+			usleep( 200 * 1000 );
+		}
 
-				function renderFrame(url){
-				root.innerHTML = `
-					<div class="jrj-psym-head">
-					<h2>Assessment</h2>
-					<div class="jrj-psym-note">If the test does not load below, <a class="jrj-psym-btn" href="${url}" target="_blank" rel="noopener">open in a new tab</a>.</div>
-					</div>
-					<iframe class="jrj-psym-iframe" src="${url}" allow="fullscreen; geolocation; microphone; camera"></iframe>
-				`;
-				}
-
-				async function tick(){
-				tries++;
-				try{
-					const res = await fetch(endpoint, {headers});
-					if(!res.ok) throw new Error("HTTP "+res.status);
-					const data = await res.json();
-					if(data && data.url){
-					renderFrame(data.url);
-					return;
-					}
-				}catch(e){
-					// swallow and retry
-				}
-				if(tries < maxTries){
-					setTimeout(tick, 1000);
-				}else{
-					msg.style.display = "block";
-					msg.textContent = "We couldn’t load the test automatically. Please check your email for the link or contact support.";
-				}
-				}
-				tick();
-			})();
-			</script>',
-			wp_json_encode( $endpoint ),
-			wp_json_encode( $nonce )
-		);
-
-		return $styles . $html;	
+		return $total;
 	}
 }

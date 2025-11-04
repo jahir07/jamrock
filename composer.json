@@ -16,8 +16,10 @@
     "psr-4": {
       "Jamrock\\Core\\": "core/",
       "Jamrock\\Controllers\\": "controllers/",
+      "Jamrock\\Services\\": "services/",
       "Jamrock\\Shortcodes\\": "shortcodes/",
-      "Jamrock\\Ajax\\": "ajax/"
+      "Jamrock\\Ajax\\": "ajax/",
+      "Jamrock\\CLI\\": "cli/"
     }
   },
   "archive": {
