@@ -246,7 +246,62 @@ class JamrockCLI {
 	}
 
 	/**
-	 * Clamp a value between 0 and 100.
+	 * Trigger autoproctor sync job.
+	 *
+	 * ## EXAMPLES
+	 *   wp jamrock autoproctor sync
+	 *   wp jamrock autoproctor sync --ids=123,124,125 --limit=20
+	 */
+	public function autoproctor( $args, $assoc_args ) {
+		$ap = new \Jamrock\Controllers\Autoproctoring();
+
+		// Normalize ids: positional or --ids=csv
+		$ids = array();
+		if ( ! empty( $args ) ) {
+			// positional args used as ids
+			$ids = array_map( 'strval', $args );
+		} elseif ( ! empty( $assoc_args['ids'] ) ) {
+			// comma separated list
+			$ids = array_map( 'trim', explode( ',', $assoc_args['ids'] ) );
+		}
+
+		// optional: allow --limit for batch size when pulling missing
+		$limit = isset( $assoc_args['limit'] ) ? intval( $assoc_args['limit'] ) : 50;
+
+		// transient lock to avoid concurrent runs
+		if ( get_transient( 'jrj_ap_sync_lock' ) ) {
+			WP_CLI::warning( 'Another autoproctor sync is already running. removing old jrj_ap_sync_lock.' );
+			delete_transient( 'jrj_ap_sync_lock' );
+		}
+		set_transient( 'jrj_ap_sync_lock', true, MINUTE_IN_SECONDS * 10 );
+
+		// If specific ids provided -> sync those
+		if ( ! empty( $ids ) ) {
+			WP_CLI::log( 'Syncing specific attempts: ' . implode( ', ', $ids ) );
+			// call a method that handles an array of ids
+			$res = $ap->do_batch_sync_by_ids( $ids );
+			if ( is_wp_error( $res ) ) {
+				WP_CLI::error( 'Sync failed: ' . $res->get_error_message() );
+			} else {
+				WP_CLI::success( 'Sync finished for ' . count( $ids ) . ' attempts.' );
+			}
+		} else {
+			// No ids -> sync missing attempts up to $limit
+			WP_CLI::log( "Syncing up to {$limit} missing attempts (integrity_score IS NULL)..." );
+			$res = $ap->do_batch_sync_missing( $limit );
+			if ( is_wp_error( $res ) ) {
+				WP_CLI::error( 'Sync failed: ' . $res->get_error_message() );
+			} else {
+				WP_CLI::success( 'Sync finished.' );
+			}
+		}
+
+		delete_transient( 'jrj_ap_sync_lock' );
+	}
+
+
+	/**
+	 * Helper: Clamp a value between 0 and 100.
 	 *
 	 * @param float $v Value to clamp.
 	 * @return float Clamped value.

@@ -62,7 +62,7 @@ class InternalAssessments {
 			(float) $this->val( $entry, $this->find_input( $form, 'phys_hygiene' ), 0 ),
 		);
 
-		$max  = 30.0; // from above 6 x 5 = 30. like phys_strength x 5, phys_endurance x 5, ..
+		$max  = 20.0; // from above 6 x 5 = 30. like phys_strength x 5, phys_endurance x 5, ..
 		$raw  = array_sum( $vals );
 		$norm = ( $max > 0 ) ? round( ( $raw / $max ) * 100, 0 ) : 0;
 		$norm = self::clamp100( $norm );
@@ -105,8 +105,9 @@ class InternalAssessments {
 			(float) $this->val( $entry, $this->find_input( $form, 'teamwork' ), 0 ),
 			(float) $this->val( $entry, $this->find_input( $form, 'communication' ), 0 ),
 		);
+		$max  = 20.0; // from above knife_skills, line_speed, .. 6 x 5 = 30. but clients says 20.
 		$raw  = array_sum( $vals );
-		$norm = round( ( $raw / 30 ) * 100, 0 );   // from above knife_skills, line_speed, .. 6 x 5 = 30.
+		$norm = ( $max > 0 ) ? round( ( $raw / $max ) * 100, 0 ) : 0;
 		$norm = self::clamp100( $norm );
 
 		$flags     = array();
@@ -143,10 +144,38 @@ class InternalAssessments {
 		$flags    = array();
 		$raw_norm = $this->val( $entry, $this->find_input( $form, 'medical_raw' ), '' );
 
+		// thresholds (could be moved to options later)
+		$th = get_option(
+			'jrj_med_thresholds',
+			array(
+				'cleared_min'      => 80, // >=80 => cleared
+				'restrictions_min' => 40, // >=40 and <80 => restrictions
+			)
+		);
+
+		// sanity
+		$clearedMin = max( 0, min( 100, (float) $th['cleared_min'] ) );
+		$restrMin   = max( 0, min( $clearedMin, (float) $th['restrictions_min'] ) );
+
+		$flags = array();
+		$raw   = null;
+		$norm  = 0;
+
+		// Prefer numeric raw 0–100 if provided
+		$raw_norm = $this->val( $entry, $this->find_input( $form, 'medical_raw' ), '' );
 		if ( $raw_norm !== '' && is_numeric( $raw_norm ) ) {
-			$norm = self::clamp100( round( (float) $raw_norm, 0 ) );
-			$raw  = (float) $raw_norm; // store raw if numeric.
+			$raw  = (float) $raw_norm;
+			$norm = self::clamp100( round( $raw, 0 ) );
+
+			if ( $norm >= $clearedMin ) {
+				// cleared (no extra flag)
+			} elseif ( $norm >= $restrMin ) {
+				$flags[] = 'restrictions';
+			} else {
+				$flags[] = 'not_cleared';
+			}
 		} else {
+			// Fallback to radio when no numeric raw is given
 			$clearance = strtolower( (string) $this->val( $entry, $this->find_input( $form, 'med_clearance' ), '' ) );
 			if ( $clearance === 'cleared' ) {
 				$norm = 100;
@@ -158,7 +187,6 @@ class InternalAssessments {
 				$flags[] = 'not_cleared';
 			}
 			$norm = self::clamp100( $norm );
-			$raw  = null; // no numeric raw for this branch.
 		}
 
 		// Checkbox flags

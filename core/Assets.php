@@ -35,6 +35,9 @@ class Assets {
 		$this->register_styles( $this->get_styles() );
 		$this->register_scripts( $this->get_scripts() );
 
+		// Ideally, only on LearnDash quiz pages:
+		$quiz_id = ( is_singular( 'sfwd-quiz' ) ? get_the_ID() : 0 );
+
 		// Localize script.
 		wp_localize_script(
 			'jamrock-frontend',
@@ -42,6 +45,16 @@ class Assets {
 			array(
 				'ajax_url' => admin_url( 'admin-ajax.php' ),
 				'nonce'    => wp_create_nonce( 'jamrock' ),
+			)
+		);
+
+		wp_localize_script(
+			'jamrock-frontend',
+			'JRJ_AP',
+			array(
+				'rest'   => esc_url_raw( rest_url( 'jamrock/v1/' ) ),
+				'nonce'  => wp_create_nonce( 'wp_rest' ),
+				'quizId' => $quiz_id,
 			)
 		);
 	}
@@ -114,7 +127,7 @@ class Assets {
 
 		$scripts = array(
 			'jamrock-frontend' => array(
-				'src'       => JRJ_ASSETS . '/js/index.js',
+				'src'       => JRJ_ASSETS . '/js/custom.js',
 				'deps'      => array( 'jquery' ), // dependency.
 				'version'   => JRJ_VERSION,
 				'in_footer' => true,
@@ -156,15 +169,5 @@ class Assets {
 			$asset_file['version'],
 			true
 		);
-
-		// Block: Result.
-		// $result_asset_file = include JRJ_PATH . '/assets/blocks/result/index.asset.php';
-		// wp_enqueue_script(
-		// 'jamrock-result',
-		// JRJ_ASSETS . '/blocks/result/index.js',
-		// $result_asset_file['dependencies'],
-		// $result_asset_file['version'],
-		// true
-		// );
 	}
 }

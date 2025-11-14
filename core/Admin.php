@@ -101,11 +101,11 @@ class Admin {
 			return;
 		}
 
-		$asset = include plugin_dir_path( __FILE__ ) . '../assets/admin/index.asset.php';
+		$asset = include plugin_dir_path( __FILE__ ) . '../assets/admin/admin.asset.php';
 
 		wp_enqueue_script(
 			'jrj-admin',
-			plugins_url( '../assets/admin/index.js', __FILE__ ),
+			JRJ_ASSETS . '/admin/admin.js',
 			$asset['dependencies'],
 			$asset['version'],
 			true
@@ -113,7 +113,7 @@ class Admin {
 
 		wp_enqueue_style(
 			'jrj-admin',
-			plugins_url( '../assets/admin/index.css', __FILE__ ),
+			JRJ_ASSETS . '/admin/index.css',
 			array(),
 			$asset['version']
 		);

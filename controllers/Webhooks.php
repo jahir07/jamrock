@@ -22,7 +22,6 @@ defined( 'ABSPATH' ) || exit;
  */
 class Webhooks {
 
-
 	/**
 	 * Register WordPress hooks.
 	 *

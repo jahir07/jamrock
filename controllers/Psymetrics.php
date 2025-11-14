@@ -59,6 +59,39 @@ class Psymetrics {
 				'callback'            => array( $this, 'sync' ),
 			)
 		);
+
+		register_rest_route(
+			'jamrock/v1',
+			'/assessments/(?P<id>\d+)',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => static function () {
+					return current_user_can( 'manage_options' ); },
+				'callback'            => array( $this, 'detail' ),
+			)
+		);
+
+		register_rest_route(
+			'jamrock/v1',
+			'/assessments/(?P<id>\d+)/refresh',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => static function () {
+					return current_user_can( 'manage_options' ); },
+				'callback'            => array( $this, 'refresh_one' ),
+			)
+		);
+
+		register_rest_route(
+			'jamrock/v1',
+			'/assessments/(?P<id>\d+)/recompute',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => static function () {
+					return current_user_can( 'manage_options' ); },
+				'callback'            => array( $this, 'recompute_from_assessment' ),
+			)
+		);
 	}
 
 	/**
@@ -273,6 +306,51 @@ class Psymetrics {
 		return $out;
 	}
 
+	public function refresh_one( \WP_REST_Request $req ) {
+		global $wpdb;
+		$t  = $wpdb->prefix . 'jamrock_assessments';
+		$id = (int) $req['id'];
+
+		$row = $wpdb->get_row(
+			$wpdb->prepare( "SELECT * FROM $t WHERE id=%d LIMIT 1", $id ),
+			ARRAY_A
+		);
+		if ( ! $row ) {
+			return new \WP_REST_Response(
+				array(
+					'ok'    => false,
+					'error' => 'not_found',
+				),
+				404
+			);
+		}
+
+		$guid = (string) ( $row['external_id'] ?? '' );
+		if ( $guid === '' ) {
+			return new \WP_REST_Response(
+				array(
+					'ok'    => false,
+					'error' => 'no_guid',
+				),
+				400
+			);
+		}
+
+		$normalized = $this->fetch_psymetrics_result_by_guid( $guid );
+		if ( ! $normalized ) {
+			return new \WP_REST_Response(
+				array(
+					'ok'    => false,
+					'error' => 'fetch_failed',
+				),
+				500
+			);
+		}
+
+		$ok = $this->upsert_psymetrics( array( $normalized ) );
+		return rest_ensure_response( array( 'ok' => (bool) $ok ) );
+	}
+
 	/**
 	 * Upsert normalized Psymetrics rows into jamrock_assessments.
 	 * Rows here may have no score; webhook/detail can update later.
@@ -441,6 +519,60 @@ class Psymetrics {
 		);
 	}
 
+	public function recompute_from_assessment( \WP_REST_Request $req ) {
+		global $wpdb;
+		$t  = $wpdb->prefix . 'jamrock_assessments';
+		$id = (int) $req['id'];
+
+		$row = $wpdb->get_row(
+			$wpdb->prepare( "SELECT * FROM $t WHERE id=%d LIMIT 1", $id ),
+			ARRAY_A
+		);
+		if ( ! $row ) {
+			return new \WP_REST_Response(
+				array(
+					'ok'    => false,
+					'error' => 'not_found',
+				),
+				404
+			);
+		}
+		$applicant_id = (int) ( $row['applicant_id'] ?? 0 );
+		if ( $applicant_id <= 0 ) {
+			return new \WP_REST_Response(
+				array(
+					'ok'    => false,
+					'error' => 'no_applicant',
+				),
+				400
+			);
+		}
+
+		$details = json_decode( (string) ( $row['details_json'] ?? '' ), true ) ?: array();
+		$map     = $this->map_psymetrics_to_norm_and_flags(
+			isset( $row['overall_score'] ) ? (float) $row['overall_score'] : null,
+			$details['candidness_raw'] ?? ( $row['candidness'] ?? null )
+		);
+
+		// Update component → recompute
+		\Jamrock\Services\Composite::update_component_and_recompute(
+			$applicant_id,
+			'psymetrics',
+			array(
+				'raw'   => isset( $row['overall_score'] ) ? (float) $row['overall_score'] : null,
+				'norm'  => $map['norm'],
+				'flags' => $map['flags'],
+				'meta'  => array(
+					'assessment'   => 'Psymetrics',
+					'external_id'  => (string) $row['external_id'],
+					'completed_at' => (string) ( $row['completed_at'] ?? '' ),
+				),
+			)
+		);
+
+		return rest_ensure_response( array( 'ok' => true ) );
+	}
+
 	/**
 	 * Refresh scores for a set of GUIDs by calling the result API.
 	 *
@@ -469,5 +601,125 @@ class Psymetrics {
 		}
 
 		return $total;
+	}
+
+
+	public function detail( \WP_REST_Request $req ) {
+		global $wpdb;
+		$t  = $wpdb->prefix . 'jamrock_assessments';
+		$a  = $wpdb->prefix . 'jamrock_applicants';
+		$id = (int) $req['id'];
+
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT s.*, ap.first_name, ap.last_name
+			 FROM $t s
+			 LEFT JOIN $a ap ON ap.id = s.applicant_id
+			 WHERE s.id=%d LIMIT 1",
+				$id
+			),
+			ARRAY_A
+		);
+
+		if ( ! $row ) {
+			return new \WP_REST_Response(
+				array(
+					'ok'    => false,
+					'error' => 'not_found',
+				),
+				404
+			);
+		}
+
+		$payload = json_decode( (string) ( $row['payload_json'] ?? '' ), true ) ?: array();
+		$details = json_decode( (string) ( $row['details_json'] ?? '' ), true ) ?: array();
+
+		// Try to fish totals from payload if provided by API
+		$subscales = array();
+		$totals    = array(
+			'total'     => null,
+			'attempted' => null,
+			'correct'   => null,
+			'incorrect' => null,
+		);
+
+		if ( ! empty( $payload['score_detail'] ) && is_array( $payload['score_detail'] ) ) {
+			foreach ( $payload['score_detail'] as $sd ) {
+				$subscales[] = array(
+					'scale'      => (string) ( $sd['scale'] ?? '' ),
+					'percentile' => isset( $sd['percentile_score'] ) ? (float) $sd['percentile_score'] : null,
+				);
+				if ( ! empty( $sd['score_interpretation'] ) && is_array( $sd['score_interpretation'] ) ) {
+					$si                  = $sd['score_interpretation'];
+					$totals['total']     = $si['total'] ?? $totals['total'];
+					$totals['attempted'] = $si['attempted'] ?? $totals['attempted'];
+					$totals['correct']   = $si['correct'] ?? $totals['correct'];
+					$totals['incorrect'] = $si['incorrect'] ?? $totals['incorrect'];
+				}
+			}
+		}
+
+		$map = $this->map_psymetrics_to_norm_and_flags(
+			isset( $row['overall_score'] ) ? (float) $row['overall_score'] : null,
+			$details['candidness_raw'] ?? ( $row['candidness'] ?? null )
+		);
+
+		return rest_ensure_response(
+			array(
+				'ok'         => true,
+				'assessment' => array(
+					'id'             => (int) $row['id'],
+					'provider'       => (string) $row['provider'],
+					'external_id'    => (string) $row['external_id'],
+					'email'          => (string) $row['email'],
+					'applicant_id'   => (int) $row['applicant_id'],
+					'applicant'      => trim( ( $row['first_name'] ?? '' ) . ' ' . ( $row['last_name'] ?? '' ) ),
+					'assessment_url' => (string) ( $row['assessment_url'] ?? '' ),
+					'overall_score'  => isset( $row['overall_score'] ) ? (float) $row['overall_score'] : null,
+					'normalized'     => $map['norm'],
+					'flags'          => $map['flags'],
+					'candidness'     => (string) ( $row['candidness'] ?? 'pending' ),
+					'completed_at'   => (string) ( $row['completed_at'] ?? '' ),
+					'created_at'     => (string) ( $row['created_at'] ?? '' ),
+					'logo'           => (string) ( $details['logo'] ?? '' ),
+					'date_invited'   => (string) ( $details['date_invited'] ?? '' ),
+					'subscales'      => $subscales,
+					'totals'         => $totals,
+				),
+			)
+		);
+	}
+
+	/**
+	 * Map Psymetrics overall_score and candidness_raw to our norm and flags.
+	 *
+	 * @param float|null $overall_score
+	 * @param mixed      $candidnessRaw
+	 * @return array{norm: float|null, flags: string[]}
+	 */
+	private function map_psymetrics_to_norm_and_flags( ?float $overall_score, $candidnessRaw ): array {
+		$norm = null;
+
+		if ( is_numeric( $overall_score ) ) {
+			// If looks like 0..5 Likert, map to percentage. Else treat as percentage.
+			if ( $overall_score >= 1 && $overall_score <= 5 ) {
+				$norm = ( ( $overall_score - 1.0 ) / 4.0 ) * 100.0; // 1→0%, 5→100%
+			} else {
+				$norm = $overall_score; // already percent-ish
+			}
+		}
+
+		$norm = is_null( $norm ) ? null : max( 0, min( 100, (float) $norm ) );
+
+		$flags = array();
+		// candidness can be boolean or string (pending/completed/flagged/invalid)
+		if ( $candidnessRaw === false || $candidnessRaw === 'flagged' || $candidnessRaw === 'invalid' ) {
+			$flags[] = 'candidness_flagged';
+		}
+
+		return array(
+			'norm'  => $norm,
+			'flags' => $flags,
+		);
 	}
 }
