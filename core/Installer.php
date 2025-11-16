@@ -37,7 +37,7 @@ class Installer {
 	 */
 	protected function create_tables(): void {
 		include_once ABSPATH . 'wp-admin/includes/upgrade.php';
-
+		$this->create_dashboard_insight_table();
 		$this->create_applicants_table();
 		$this->create_assessments_table();
 		$this->create_autoproctor_tables();
@@ -47,7 +47,33 @@ class Installer {
 		$this->create_feedback_table();
 	}
 
+	/**
+	 * Dashboard insight events table.
+	 *
+	 * @return void
+	 */
+	protected function create_dashboard_insight_table(): void {
+		global $wpdb;
 
+		$charset = $wpdb->get_charset_collate();
+		$t       = "{$wpdb->prefix}jamrock_dashboard_events";
+
+		$sql_events = "CREATE TABLE {$t} (
+			id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+			user_id BIGINT UNSIGNED NULL,
+			actor_type VARCHAR(32) NOT NULL DEFAULT 'candidate', -- candidate|employee|admin
+			event_key VARCHAR(64) NOT NULL,
+			context_key VARCHAR(64) NULL,
+			context_id VARCHAR(191) NULL,
+			meta LONGTEXT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			INDEX (user_id),
+			INDEX (event_key),
+			INDEX (created_at)
+		) {$charset};";
+
+		dbDelta( $sql_events );
+	}
 	/**
 	 * Applicants table.
 	 */

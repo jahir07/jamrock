@@ -42,33 +42,53 @@ class Admin {
 			__( 'Jamrock', 'jamrock' ),
 			__( 'Jamrock', 'jamrock' ),
 			'manage_options',
-			self::SLUG, // e.g. 'jamrock'
+			self::SLUG,
 			array( $this, 'render_app' ),
 			'dashicons-feedback',
-			56
+			3
 		);
 
-		// Helper to create submenu with a view param.
+		add_submenu_page(
+			self::SLUG,
+			__( 'Dashboard', 'jamrock' ),
+			__( 'Dashboard', 'jamrock' ),
+			'manage_options',
+			self::SLUG,
+			array( $this, 'render_app' )
+		);
+
 		$add = function ( $title, $view ) {
 			add_submenu_page(
 				self::SLUG,
 				$title,
 				$title,
 				'manage_options',
-				self::SLUG . '&view=' . $view, // <-- key part
+				self::SLUG . '&view=' . $view,
 				array( $this, 'render_app' )
 			);
 		};
 
 		$add( __( 'Settings', 'jamrock' ), 'settings' );
 		$add( __( 'Courses', 'jamrock' ), 'courses' );
-		$add( __( 'Applicants', 'jamrock' ), 'applicants' );
+		$add( __( 'Applicants', 'jamrock' ), 'applicantswithcomposite' );
 		$add( __( 'Assessments', 'jamrock' ), 'assessments' );
 		$add( __( 'Housing', 'jamrock' ), 'housing' );
 		$add( __( 'Feedback', 'jamrock' ), 'feedback' );
+
+		// add CPT link *manually* to point at edit.php?post_type=jrj_announcement
+		// This will appear under Jamrock menu and link to the CPT list screen.
+		add_submenu_page(
+			self::SLUG,
+			__( 'Announcements', 'jamrock' ),
+			__( 'Announcements', 'jamrock' ),
+			'manage_options',
+			'edit.php?post_type=jrj_announcement'
+		);
+
 		$add( __( 'Logs', 'jamrock' ), 'logs' );
 		$add( __( 'Info & Shortcodes', 'jamrock' ), 'info' );
 	}
+
 
 	/**
 	 * Render the admin app container.
@@ -79,9 +99,9 @@ class Admin {
 		echo '<div id="jamrock-admin-app"></div>';
 
 		$view    = isset( $_GET['view'] ) ? sanitize_key( wp_unslash( $_GET['view'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$allowed = array( 'settings', 'courses', 'housing', 'applicants', 'assessments', 'feedback', 'logs', 'info' );
+		$allowed = array( 'dashboard', 'settings', 'courses', 'housing', 'applicants', 'assessments', 'feedback', 'logs', 'info' );
 		if ( ! in_array( $view, $allowed, true ) ) {
-			$view = 'settings'; // default tab.
+			$view = 'dashboard'; // default tab.
 		}
 		?>
 			<script>

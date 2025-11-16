@@ -14,9 +14,11 @@ add_action(
 				'label'        => 'Announcements',
 				'public'       => false,
 				'show_ui'      => true,
-				'show_in_menu' => 'wp-jamrock',
+				'show_in_menu' => false,
+				// 'show_in_menu'  => 'wp-jamrock',
 				'supports'     => array( 'title', 'editor' ),
-				'menu_icon'    => 'dashicons-megaphone',
+				// 'menu_icon'     => 'dashicons-megaphone',
+				// 'menu_position' => 57,
 			)
 		);
 

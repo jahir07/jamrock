@@ -1,13 +1,13 @@
 import {
 	createApp,
 	ref,
-	reactive,
 	onMounted,
 	onBeforeUnmount,
 } from 'vue/dist/vue.esm-bundler.js';
 import './index.scss';
 
-import SettingsPage from './components/SettingsPage.js';
+import Dashboard from './components/Dashboard.js';
+import SettingsPage from "./components/SettingsPage.js";
 import ApplicantsWithComposite from "./components/ApplicantsWithComposite.js";
 import AssessmentsList from './components/AssessmentsList.js';
 import CoursesList from './components/CoursesList.js';
@@ -32,6 +32,7 @@ const InfoPage = {
 };
 
 const allowedTabs = [
+  "dashboard",
   "settings",
   "courses",
   "housing",
@@ -56,10 +57,11 @@ function writeTabToUrl( tab ) {
 
 const App = {
   components: {
+    Dashboard,
     SettingsPage,
+    CoursesList,
     ApplicantsWithComposite,
     AssessmentsList,
-    CoursesList,
     HousingList,
     FeedbackList,
     LogsList,
@@ -104,6 +106,7 @@ const App = {
     <div class="wrap jrj-admin">
       <h1 class="wp-heading-inline">Jamrock</h1>
       <h2 class="nav-tab-wrapper">
+        <button :class="['nav-tab', {'nav-tab-active': tab==='dashboard'}]"    @click.prevent="setTab('dashboard')">Dashboard</button>
         <button :class="['nav-tab', {'nav-tab-active': tab==='settings'}]"    @click.prevent="setTab('settings')">Settings</button>
         <button :class="['nav-tab', {'nav-tab-active': tab==='courses'}]"     @click.prevent="setTab('courses')">Courses</button>
         <button :class="['nav-tab', {'nav-tab-active': tab==='applicantswithcomposite'}]" @click.prevent="setTab('applicantswithcomposite')">Applicants</button>
@@ -114,7 +117,8 @@ const App = {
         <button :class="['nav-tab', {'nav-tab-active': tab==='info'}]"        @click.prevent="setTab('info')">Info</button>
       </h2>
 
-      <SettingsPage    v-if="tab==='settings'" />
+      <Dashboard       v-if="tab==='dashboard'" />
+      <SettingsPage    v-else-if="tab==='settings'" />
       <CoursesList     v-else-if="tab==='courses'" />
       <HousingList     v-else-if="tab==='housing'" />
       <ApplicantsWithComposite  v-else-if="tab==='applicantswithcomposite'" />

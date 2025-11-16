@@ -139,6 +139,7 @@ final class Plugin {
 		( new \Jamrock\Core\Admin() )->hooks();
 
 		// Controllers.
+		( new \Jamrock\Controllers\Insights() )->hooks();
 		( new \Jamrock\Controllers\Settings() )->hooks();
 		( new \Jamrock\Controllers\Psymetrics() )->hooks();
 		( new \Jamrock\Controllers\Composite() )->hooks();

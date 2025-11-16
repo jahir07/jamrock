@@ -196,6 +196,35 @@
     background: #e2e2e2;
 }
 
+.jrj-chart-card {
+    display: flex;
+    flex-direction: column;
+    /* card total height */
+    min-height: 160px;
+    max-width: 33%;
+}
+
+.jrj-chart-card .jrj-chart-body {
+    flex: 1 1 auto;
+    padding: 6px 10px;
+    position: relative;
+}
+
+/* wrapper controls canvas visible height */
+.jrj-chart-card .jrj-chart-wrap {
+    height: 100%;
+    min-height: 120px;
+    /* minimum visible chart area */
+    max-height: 220px;
+}
+
+/* ensure canvas fills wrapper */
+.jrj-chart-card canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+}
+
 /* Donut — percentage comes from the CSS var --pct, set via Vue inline style. */
 .donut {
     --size: 80px;
