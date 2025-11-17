@@ -48,6 +48,7 @@ register_activation_hook(
 		// Gravity Forms internal forms setup.
 		require_once __DIR__ . '/includes/gf-internal-forms.php';
 		if ( class_exists( 'GFAPI' ) ) {
+			jrj_create_registration_form();
 			$physical_id = jrj_create_physical_form();
 			$skills_id   = jrj_create_skills_form();
 			$medical_id  = jrj_create_medical_form();
@@ -142,9 +143,8 @@ if ( ! function_exists( 'jamrock' ) ) {
 	}
 }
 
-// CLI command register কেবল WP-CLI context এ
+// CLI command register  WP-CLI context.
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
-	// Composer autoload ব্যবহার করলে namespace class পাওয়া যাবে
 	WP_CLI::add_command( 'jamrock', '\Jamrock\CLI\JamrockCLI' );
 }
 

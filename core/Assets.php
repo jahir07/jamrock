@@ -32,16 +32,68 @@ class Assets {
 	 * @return void
 	 */
 	public function frontend_register() {
+		// register styles/scripts first (your existing helpers)
 		$this->register_styles( $this->get_styles() );
 		$this->register_scripts( $this->get_scripts() );
 
-		// Localize script.
+		// Only compute once
+		$quiz_id      = ( is_singular( 'sfwd-quiz' ) ? get_the_ID() : 0 );
+		$current_user = wp_get_current_user();
+
+		// Ensure the main handle exists and is enqueued. If your register_scripts registers 'jamrock-frontend'
+		// then enqueue it here (frontend asset). If you conditionally load, change logic appropriately.
+		if ( wp_script_is( 'jamrock-frontend', 'registered' ) && ! wp_script_is( 'jamrock-frontend', 'enqueued' ) ) {
+			wp_enqueue_script( 'jamrock-frontend' );
+		}
+
+		// Nonces
+		$rest_nonce = wp_create_nonce( 'wp_rest' );
+		$ajax_nonce = wp_create_nonce( 'jamrock' );
+
+		// Prepare JRJ_AP (AutoProctor / LearnDash integration)
+		$jrj_ap = array(
+			'rest'     => esc_url_raw( rest_url( 'jamrock/v1/' ) ),
+			'nonce'    => $rest_nonce,
+			'quizId'   => (int) $quiz_id,
+			'root'     => esc_url_raw( rest_url( 'jamrock/v1/' ) ),
+			'userName' => $current_user->display_name ?: '',
+			'email'    => $current_user->user_email ?: '',
+		);
+
+		// jamrock_loc (legacy).
+		$jamrock_loc = array(
+			'ajax_url' => admin_url( 'admin-ajax.php' ),
+			'nonce'    => $ajax_nonce,
+		);
+
+		// JRJ_INSIGHTS config.
+		$cfg = array(
+			'root'              => rest_url( 'jamrock/v1' ),
+			'endpoint'          => rest_url( 'jamrock/v1/insights/events' ),
+			'nonce'             => $rest_nonce,
+			'heartbeatInterval' => 60,
+			'debug'             => ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ? true : false,
+		);
+
+		// JRJ_USER info.
+		$jrj_user = array(
+			'id'    => $current_user->ID ? intval( $current_user->ID ) : null,
+			'role'  => ! empty( $current_user->roles ) ? $current_user->roles[0] : 'guest',
+			'name'  => $current_user->display_name ?: '',
+			'email' => $current_user->user_email ?: '',
+		);
+
+		// Localize once (grouped). Use the same script handle you enqueued: 'jamrock-frontend'.
+		wp_localize_script( 'jamrock-frontend', 'jamrock_loc', $jamrock_loc );
+		wp_localize_script( 'jamrock-frontend', 'JRJ_AP', $jrj_ap );
+		wp_localize_script( 'jamrock-frontend', 'JRJ_INSIGHTS', $cfg );
+		wp_localize_script( 'jamrock-frontend', 'JRJ_USER', $jrj_user );
 		wp_localize_script(
 			'jamrock-frontend',
-			'jamrock_loc',
+			'JRJ_ADMIN',
 			array(
-				'ajax_url' => admin_url( 'admin-ajax.php' ),
-				'nonce'    => wp_create_nonce( 'jamrock' ),
+				'nonce' => $rest_nonce,
+				'root'  => rest_url( 'jamrock/v1' ) . '/',
 			)
 		);
 	}
@@ -114,7 +166,7 @@ class Assets {
 
 		$scripts = array(
 			'jamrock-frontend' => array(
-				'src'       => JRJ_ASSETS . '/js/index.js',
+				'src'       => JRJ_ASSETS . '/js/custom.js',
 				'deps'      => array( 'jquery' ), // dependency.
 				'version'   => JRJ_VERSION,
 				'in_footer' => true,
@@ -156,15 +208,5 @@ class Assets {
 			$asset_file['version'],
 			true
 		);
-
-		// Block: Result.
-		// $result_asset_file = include JRJ_PATH . '/assets/blocks/result/index.asset.php';
-		// wp_enqueue_script(
-		// 'jamrock-result',
-		// JRJ_ASSETS . '/blocks/result/index.js',
-		// $result_asset_file['dependencies'],
-		// $result_asset_file['version'],
-		// true
-		// );
 	}
 }

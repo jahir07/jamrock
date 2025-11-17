@@ -139,12 +139,13 @@ final class Plugin {
 		( new \Jamrock\Core\Admin() )->hooks();
 
 		// Controllers.
+		( new \Jamrock\Controllers\Insights() )->hooks();
 		( new \Jamrock\Controllers\Settings() )->hooks();
 		( new \Jamrock\Controllers\Psymetrics() )->hooks();
 		( new \Jamrock\Controllers\Composite() )->hooks();
 		// form IDs from options.
 		$form_physical = (int) get_option( 'jrj_form_physical_id', 0 ) ?: 2;
-		$form_skills   = (int) get_option( 'jrj_form_skillsform_skills: _id', 0 ) ?: 3;
+		$form_skills   = (int) get_option( 'jrj_form_skills_id', 0 ) ?: 3;
 		$form_medical  = (int) get_option( 'jrj_form_medical_id', 0 ) ?: 4;
 		( new \Jamrock\Controllers\InternalAssessments( $form_physical, $form_skills, $form_medical ) )->hooks();
 
@@ -154,6 +155,12 @@ final class Plugin {
 		( new \Jamrock\Controllers\Housing() )->hooks();
 		( new \Jamrock\Controllers\Logs() )->hooks();
 		( new \Jamrock\Controllers\Courses() )->hooks();
+
+		// Autoproctor Settings
+		( new \Jamrock\Controllers\AutoproctorSettings() )->hooks();
+		( new \Jamrock\Controllers\Autoproctoring() )->hooks();
+		( new \Jamrock\Controllers\AutoproctorLearndashMetaBox() )->hooks();
+
 		// ( new Feedback() )->hooks();
 
 		( new \Jamrock\Controllers\CoursesSync() )->hooks();
@@ -194,6 +201,8 @@ final class Plugin {
 
 			// Register PsymetricsAssessmentIframe shortcode.
 			\Jamrock\Shortcodes\PsymetricsAssessmentIframe::register();
+
+			( new \Jamrock\Controllers\AutoproctorFrontend() )->hooks();
 			// \Jamrock\Shortcodes\FeedbackShortcode::register();
 
 		}

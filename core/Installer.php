@@ -37,16 +37,43 @@ class Installer {
 	 */
 	protected function create_tables(): void {
 		include_once ABSPATH . 'wp-admin/includes/upgrade.php';
-
+		$this->create_dashboard_insight_table();
 		$this->create_applicants_table();
 		$this->create_assessments_table();
+		$this->create_autoproctor_tables();
 		$this->create_courses_table();
 		$this->create_housing_links_table();
 		$this->create_logs_table();
 		$this->create_feedback_table();
 	}
 
+	/**
+	 * Dashboard insight events table.
+	 *
+	 * @return void
+	 */
+	protected function create_dashboard_insight_table(): void {
+		global $wpdb;
 
+		$charset = $wpdb->get_charset_collate();
+		$t       = "{$wpdb->prefix}jamrock_dashboard_events";
+
+		$sql_events = "CREATE TABLE {$t} (
+			id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+			user_id BIGINT UNSIGNED NULL,
+			actor_type VARCHAR(32) NOT NULL DEFAULT 'candidate', -- candidate|employee|admin
+			event_key VARCHAR(64) NOT NULL,
+			context_key VARCHAR(64) NULL,
+			context_id VARCHAR(191) NULL,
+			meta LONGTEXT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			INDEX (user_id),
+			INDEX (event_key),
+			INDEX (created_at)
+		) {$charset};";
+
+		dbDelta( $sql_events );
+	}
 	/**
 	 * Applicants table.
 	 */
@@ -112,7 +139,6 @@ class Installer {
 			KEY computed_at (computed_at)
 		) {$charset};";
 
-		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql_applicants );
 		dbDelta( $sql_composites );
 		dbDelta( $sql_history );
@@ -185,16 +211,53 @@ class Installer {
 		$table   = $wpdb->prefix . 'jamrock_housing_links';
 		$charset = $wpdb->get_charset_collate();
 
-		$sql = "CREATE TABLE {$table} (
-			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-			title VARCHAR(191) NOT NULL,
-			url VARCHAR(255) NOT NULL,
-			visibility_status ENUM('all','shortlisted','active_only') DEFAULT 'all',
+		$sql = "CREATE TABLE IF NOT EXISTS $table (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			title VARCHAR(200) NOT NULL,
+			url TEXT NOT NULL,
+			category VARCHAR(100) DEFAULT NULL,
+			visibility_status ENUM('public','private','hidden') DEFAULT 'public',
+			sort_order INT DEFAULT 0,
+			notes TEXT NULL,
+			http_status SMALLINT NULL,
+			last_checked DATETIME NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-			PRIMARY KEY (id)
-		) {$charset};";
+			PRIMARY KEY (id),
+			KEY visibility_status (visibility_status),
+			KEY sort_order (sort_order),
+			KEY category (category)
+		) $charset;";
 
 		dbDelta( $sql );
+	}
+
+	private static function create_autoproctor_tables() {
+		global $wpdb;
+		$charset = $wpdb->get_charset_collate();
+
+		$t1   = $wpdb->prefix . 'jamrock_autoproctor_attempts';
+		$sql1 = "CREATE TABLE $t1 (
+			id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+			user_id BIGINT UNSIGNED NOT NULL,
+			user_name VARCHAR(191) NULL,
+  			user_email VARCHAR(191) NULL,
+			quiz_id BIGINT UNSIGNED NOT NULL,
+			attempt_id BIGINT UNSIGNED DEFAULT 0,
+			provider VARCHAR(50) NOT NULL DEFAULT 'autoproctor',
+			session_id VARCHAR(191) DEFAULT NULL,
+			integrity_score FLOAT DEFAULT NULL,
+			flags_json LONGTEXT NULL,
+			raw_payload_json LONGTEXT NULL,
+			started_at DATETIME DEFAULT NULL,
+			completed_at DATETIME DEFAULT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			KEY user_quiz (user_id, quiz_id),
+			KEY session_id (session_id)
+			) $charset;";
+
+		dbDelta( $sql1 );
 	}
 
 	/**

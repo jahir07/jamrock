@@ -35,7 +35,8 @@ export default {
 
         const json = await res.json();
         items.value = json.items || [];
-
+        console.log(items);
+        
         // total comes from headers (per controller)
         const totalHeader = res.headers.get("X-WP-Total");
         total.value = totalHeader ? parseInt(totalHeader, 10) : json.total || 0;
@@ -72,7 +73,7 @@ export default {
     <table class="jrj-table">
       <thead>
         <tr>
-          <th>#</th><th>User</th><th>Course</th><th>Status</th><th>Score</th><th>Certificate</th><th>Expiry</th><th>Updated</th>
+          <th>#</th><th>Course ID</th><th>Status</th><th>Score</th><th>Certificate</th><th>Expiry</th><th>Updated</th>
         </tr>
       </thead>
       <tbody>
@@ -80,7 +81,6 @@ export default {
 
         <tr v-for="r in items" :key="r.id">
           <td>{{ r.id }}</td>
-          <td>{{ r.user_id }}</td>
           <td>{{ r.course_id }}</td>
           <td>{{ r.status }}</td>
           <td>{{ r.score ?? '-' }}</td>
