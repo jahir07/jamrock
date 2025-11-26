@@ -8,6 +8,9 @@
 /logs
 *.log
 .phpcs.cache
+*-copy.js
+*-copy.php
+*-copy.css
 
 # Composer
 # /vendor

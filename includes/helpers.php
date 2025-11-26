@@ -83,24 +83,3 @@ add_action(
 if ( ! wp_next_scheduled( 'jrj_psymetrics_cron' ) ) {
 	wp_schedule_event( time() + 300, 'daily', 'jrj_psymetrics_cron' );
 }
-
-add_action(
-	'jrj_housing_linkcheck',
-	function () {
-		$ctl = new \Jamrock\Controllers\Housing();
-		global $wpdb;
-		$t   = $wpdb->prefix . 'jamrock_housing_links';
-		$ids = $wpdb->get_col( "SELECT id FROM $t ORDER BY last_checked IS NULL DESC, last_checked ASC, id DESC LIMIT 20" );
-		if ( ! $ids ) {
-			return;
-		}
-		foreach ( $ids as $id ) {
-			$req = new \WP_REST_Request( 'POST', "/jamrock/v1/housing/$id/check" );
-			$ctl->check_url( $req );
-			usleep( 150 * 1000 );
-		}
-	}
-);
-if ( ! wp_next_scheduled( 'jrj_housing_linkcheck' ) ) {
-	wp_schedule_event( time() + 120, 'hourly', 'jrj_housing_linkcheck' );
-}

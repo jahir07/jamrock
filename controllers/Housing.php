@@ -6,6 +6,9 @@ namespace Jamrock\Controllers;
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Class of Housing
+ */
 class Housing {
 
 
@@ -16,343 +19,852 @@ class Housing {
 	public function routes(): void {
 		register_rest_route(
 			'jamrock/v1',
-			'/housing',
+			'/housing/current',
 			array(
 				'methods'             => 'GET',
-				'permission_callback' => fn() => current_user_can( 'manage_options' ),
-				'callback'            => array( $this, 'list' ),
+				'permission_callback' => function () {
+					return is_user_logged_in(); },
+				'callback'            => array( $this, 'housing_get_current' ),
 			)
 		);
 
 		register_rest_route(
 			'jamrock/v1',
-			'/housing',
+			'/housing/apply',
 			array(
 				'methods'             => 'POST',
-				'permission_callback' => fn() => current_user_can( 'manage_options' ),
-				'callback'            => array( $this, 'create' ),
+				'permission_callback' => function () {
+					return is_user_logged_in(); },
+				'callback'            => array( $this, 'housing_handle_apply' ),
+				'args'                => array(),
 			)
 		);
 
 		register_rest_route(
 			'jamrock/v1',
-			'/housing/(?P<id>\d+)',
+			'/housing/verify',
 			array(
 				'methods'             => 'POST',
-				'permission_callback' => fn() => current_user_can( 'manage_options' ),
-				'callback'            => array( $this, 'update' ),
+				'permission_callback' => function () {
+					return is_user_logged_in();
+				},
+				'callback'            => array( $this, 'housing_handle_verify' ),
+				'args'                => array(),
 			)
 		);
 
 		register_rest_route(
 			'jamrock/v1',
-			'/housing/(?P<id>\d+)',
-			array(
-				'methods'             => 'DELETE',
-				'permission_callback' => fn() => current_user_can( 'manage_options' ),
-				'callback'            => array( $this, 'delete' ),
-			)
-		);
-
-		register_rest_route(
-			'jamrock/v1',
-			'/housing/(?P<id>\d+)/toggle',
+			'/housing/(?P<id>\d+)/status',
 			array(
 				'methods'             => 'POST',
-				'permission_callback' => fn() => current_user_can( 'manage_options' ),
-				'callback'            => array( $this, 'toggle_visibility' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' ); }, // change capability to suit recruiters
+				'callback'            => array( $this, 'housing_update_status' ),
+				'args'                => array(
+					'status' => array(
+						'required'          => true,
+						'validate_callback' => function ( $v ) {
+							return in_array( $v, array( 'pending', 'approved', 'rejected' ) ); },
+					),
+					'note'   => array( 'required' => false ),
+				),
+			)
+		);
+
+		// backend.
+		register_rest_route(
+			'jamrock/v1',
+			'/housing/applicants',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+				'callback'            => array( $this, 'housing_list' ),
 			)
 		);
 
 		register_rest_route(
 			'jamrock/v1',
-			'/housing/(?P<id>\d+)/check',
+			'/housing/applicants/(?P<id>\d+)',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+				'callback'            => array( $this, 'housing_get_one' ),
+			)
+		);
+
+		register_rest_route(
+			'jamrock/v1',
+			'/housing/applicants/(?P<id>\d+)',
 			array(
 				'methods'             => 'POST',
-				'permission_callback' => fn() => current_user_can( 'manage_options' ),
-				'callback'            => array( $this, 'check_url' ),
+				'permission_callback' => function () {
+					return current_user_can( 'manage_options' );
+				},
+				'callback'            => array( $this, 'housing_update' ),
+				'args'                => array(
+					'status'           => array( 'required' => true ),
+					'rejection_reason' => array( 'required' => false ),
+				),
+			)
+		);
+
+		// payment extention
+		register_rest_route(
+			'jamrock/v1',
+			'/housing/applicants/(?P<id>\d+)/extension',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => function () {
+					// Only managers/admin can do this
+					return current_user_can( 'manage_options' ) || current_user_can( 'edit_users' );
+				},
+				'callback'            => array( $this, 'update_payment_extension' ),
 			)
 		);
 	}
 
-	public function list( \WP_REST_Request $req ) {
+
+	public function housing_get_current( $req ) {
 		global $wpdb;
-		$t = $wpdb->prefix . 'jamrock_housing_links';
+		$tbl = $wpdb->prefix . 'jamrock_housing_applications';
 
-		$page   = max( 1, (int) $req->get_param( 'page' ) );
-		$per    = min( 100, max( 1, (int) ( $req->get_param( 'per_page' ) ?: 10 ) ) );
-		$offset = ( $page - 1 ) * $per;
-
-		$visibility = sanitize_text_field( (string) $req->get_param( 'visibility' ) );
-		$category   = sanitize_text_field( (string) $req->get_param( 'category' ) );
-		$search     = sanitize_text_field( (string) $req->get_param( 'q' ) );
-
-		$where  = array( '1=1' );
-		$params = array();
-
-		if ( $visibility !== '' ) {
-			$where[]  = 'visibility_status = %s';
-			$params[] = $visibility;
-		}
-		if ( $category !== '' ) {
-			$where[]  = 'category = %s';
-			$params[] = $category;
-		}
-		if ( $search !== '' ) {
-			$where[]  = '(title LIKE %s OR url LIKE %s)';
-			$params[] = '%' . $wpdb->esc_like( $search ) . '%';
-			$params[] = '%' . $wpdb->esc_like( $search ) . '%';
-		}
-
-		$where_sql = implode( ' AND ', $where );
-		$sql_total = $wpdb->prepare( "SELECT COUNT(*) FROM $t WHERE $where_sql", $params );
-		$total     = (int) $wpdb->get_var( $sql_total );
-
-		$sql_rows = $wpdb->prepare(
-			"SELECT id, title, url, category, visibility_status, sort_order, http_status, last_checked, updated_at
-			 FROM $t
-			 WHERE $where_sql
-			 ORDER BY sort_order ASC, id DESC
-			 LIMIT %d OFFSET %d",
-			array_merge( $params, array( $per, $offset ) )
-		);
-		$rows     = $wpdb->get_results( $sql_rows, ARRAY_A ) ?: array();
-
-		return rest_ensure_response(
-			array(
-				'items'    => $rows,
-				'total'    => $total,
-				'page'     => $page,
-				'per_page' => $per,
-			)
-		);
-	}
-
-	public function create( \WP_REST_Request $req ) {
-		global $wpdb;
-		$t = $wpdb->prefix . 'jamrock_housing_links';
-		$b = $req->get_json_params() ?: array();
-
-		$title = sanitize_text_field( (string) ( $b['title'] ?? '' ) );
-		$url   = esc_url_raw( (string) ( $b['url'] ?? '' ) );
-		$cat   = sanitize_text_field( (string) ( $b['category'] ?? '' ) );
-		$vis   = in_array( ( $b['visibility'] ?? 'public' ), array( 'public', 'private', 'hidden' ), true ) ? $b['visibility'] : 'public';
-		$notes = wp_kses_post( (string) ( $b['notes'] ?? '' ) );
-		$sort  = (int) ( $b['sort_order'] ?? 0 );
-
-		if ( $title === '' || $url === '' ) {
-			return new \WP_REST_Response(
+		$user = wp_get_current_user();
+		if ( ! $user || ! $user->ID ) {
+			return rest_ensure_response(
 				array(
 					'ok'    => false,
-					'error' => 'title_url_required',
+					'error' => 'not_logged_in',
 				),
-				400
+				403
 			);
 		}
 
-		$ok = $wpdb->insert(
-			$t,
-			array(
-				'title'             => $title,
-				'url'               => $url,
-				'category'          => ( $cat !== '' ? $cat : null ),
-				'visibility_status' => $vis,
-				'sort_order'        => $sort,
-				'notes'             => ( $notes !== '' ? $notes : null ),
-				'created_at'        => current_time( 'mysql' ),
-				'updated_at'        => current_time( 'mysql' ),
-			)
-		);
-
-		if ( $ok === false ) {
-			return new \WP_REST_Response(
-				array(
-					'ok'    => false,
-					'error' => 'db_error',
-				),
-				500
-			);
-		}
-		return rest_ensure_response(
-			array(
-				'ok' => true,
-				'id' => (int) $wpdb->insert_id,
-			)
-		);
-	}
-
-	public function update( \WP_REST_Request $req ) {
-		global $wpdb;
-		$t  = $wpdb->prefix . 'jamrock_housing_links';
-		$id = (int) $req['id'];
-		$b  = $req->get_json_params() ?: array();
-
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id FROM $t WHERE id=%d", $id ), ARRAY_A );
-		if ( ! $row ) {
-			return new \WP_REST_Response(
-				array(
-					'ok'    => false,
-					'error' => 'not_found',
-				),
-				404
-			);
-		}
-
-		$data = array();
-		if ( isset( $b['title'] ) ) {
-			$data['title'] = sanitize_text_field( (string) $b['title'] );
-		}
-		if ( isset( $b['url'] ) ) {
-			$data['url'] = esc_url_raw( (string) $b['url'] );
-		}
-		if ( isset( $b['category'] ) ) {
-			$data['category'] = sanitize_text_field( (string) $b['category'] ) ?: null;
-		}
-		if ( isset( $b['visibility'] ) ) {
-			$v = (string) $b['visibility'];
-			if ( in_array( $v, array( 'public', 'private', 'hidden' ), true ) ) {
-				$data['visibility_status'] = $v;
-			}
-		}
-		if ( isset( $b['notes'] ) ) {
-			$data['notes'] = wp_kses_post( (string) $b['notes'] ) ?: null;
-		}
-		if ( isset( $b['sort_order'] ) ) {
-			$data['sort_order'] = (int) $b['sort_order'];
-		}
-
-		if ( empty( $data ) ) {
-			return rest_ensure_response( array( 'ok' => true ) ); // nothing to update
-		}
-
-		$data['updated_at'] = current_time( 'mysql' );
-		$ok                 = $wpdb->update( $t, $data, array( 'id' => $id ) );
-		if ( $ok === false ) {
-			return new \WP_REST_Response(
-				array(
-					'ok'    => false,
-					'error' => 'db_error',
-				),
-				500
-			);
-		}
-
-		return rest_ensure_response( array( 'ok' => true ) );
-	}
-
-	public function delete( \WP_REST_Request $req ) {
-		global $wpdb;
-		$t  = $wpdb->prefix . 'jamrock_housing_links';
-		$id = (int) $req['id'];
-		$ok = $wpdb->delete( $t, array( 'id' => $id ) );
-		if ( $ok === false ) {
-			return new \WP_REST_Response(
-				array(
-					'ok'    => false,
-					'error' => 'db_error',
-				),
-				500
-			);
-		}
-		return rest_ensure_response( array( 'ok' => true ) );
-	}
-
-	public function toggle_visibility( \WP_REST_Request $req ) {
-		global $wpdb;
-		$t  = $wpdb->prefix . 'jamrock_housing_links';
-		$id = (int) $req['id'];
-
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT visibility_status FROM $t WHERE id=%d", $id ), ARRAY_A );
-		if ( ! $row ) {
-			return new \WP_REST_Response(
-				array(
-					'ok'    => false,
-					'error' => 'not_found',
-				),
-				404
-			);
-		}
-
-		$next = $row['visibility_status'] === 'public' ? 'hidden' : 'public';
-		$ok   = $wpdb->update(
-			$t,
-			array(
-				'visibility_status' => $next,
-				'updated_at'        => current_time( 'mysql' ),
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$tbl} WHERE applicant_id = %d ORDER BY created_at DESC LIMIT 1",
+				$user->ID
 			),
-			array( 'id' => $id )
+			ARRAY_A
 		);
-		if ( $ok === false ) {
-			return new \WP_REST_Response(
-				array(
-					'ok'    => false,
-					'error' => 'db_error',
-				),
-				500
-			);
-		}
 
-		return rest_ensure_response(
-			array(
-				'ok'         => true,
-				'visibility' => $next,
-			)
-		);
-	}
-
-	public function check_url( \WP_REST_Request $req ) {
-		global $wpdb;
-		$t  = $wpdb->prefix . 'jamrock_housing_links';
-		$id = (int) $req['id'];
-
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT url FROM $t WHERE id=%d", $id ), ARRAY_A );
 		if ( ! $row ) {
-			return new \WP_REST_Response(
+			return rest_ensure_response(
 				array(
-					'ok'    => false,
-					'error' => 'not_found',
-				),
-				404
-			);
-		}
-
-		$url = esc_url_raw( (string) $row['url'] );
-		if ( $url === '' ) {
-			return new \WP_REST_Response(
-				array(
-					'ok'    => false,
-					'error' => 'no_url',
-				),
-				400
-			);
-		}
-
-		$r = wp_remote_head( $url, array( 'timeout' => 8 ) );
-		if ( is_wp_error( $r ) || (int) wp_remote_retrieve_response_code( $r ) === 405 ) {
-			$r = wp_remote_get(
-				$url,
-				array(
-					'timeout'     => 8,
-					'redirection' => 3,
+					'ok'          => true,
+					'application' => null,
 				)
 			);
 		}
-		$code = is_wp_error( $r ) ? 0 : (int) wp_remote_retrieve_response_code( $r );
 
-		$wpdb->update(
-			$t,
-			array(
-				'http_status'  => $code ?: null,
-				'last_checked' => current_time( 'mysql' ),
-				'updated_at'   => current_time( 'mysql' ),
-			),
-			array( 'id' => $id )
-		);
+		// cast JSON columns back to arrays if stored
+		if ( isset( $row['for_rental'] ) && $row['for_rental'] ) {
+			$row['for_rental'] = json_decode( $row['for_rental'], true );
+		}
+		if ( isset( $row['for_verification'] ) && $row['for_verification'] ) {
+			$row['for_verification'] = json_decode( $row['for_verification'], true );
+		}
 
 		return rest_ensure_response(
 			array(
 				'ok'          => true,
-				'http_status' => $code ?: null,
+				'application' => $row,
+			)
+		);
+	}
+
+
+	/**
+	 * Apply housing.
+	 *
+	 * @param \WP_REST_Request $req REST request.
+	 * @return \WP_Error|\WP_REST_Response Response or error.
+	 */
+	public function housing_handle_apply( \WP_REST_Request $req ) {
+		global $wpdb;
+		$tbl = $wpdb->prefix . 'jamrock_housing_applications';
+
+		$user = wp_get_current_user();
+		if ( ! $user || ! $user->ID ) {
+			return rest_ensure_response(
+				array(
+					'ok'    => false,
+					'error' => 'not_logged_in',
+				),
+				403
+			);
+		}
+
+		// get params
+		$need = $req->get_param( 'need_housing' ) ?: $req->get_param( 'need' ) ?: 'yes';
+		$need = in_array( $need, array( 'yes', 'no' ) ) ? $need : 'yes';
+
+		// basic common fields
+		$full_name    = sanitize_text_field( $req->get_param( 'full_name' ) ?: '' );
+		$phone        = sanitize_text_field( $req->get_param( 'phone' ) ?: '' );
+		$move_in_date = $req->get_param( 'move_in_date' ) ? sanitize_text_field( $req->get_param( 'move_in_date' ) ) : null;
+
+		// files: use file params (works with FormData from browser)
+		// require WP file functions
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+		require_once ABSPATH . 'wp-admin/includes/media.php';
+
+		$uploaded_id_url      = null;
+		$uploaded_capture_url = null;
+		$uploaded_proof_url   = null;
+
+		// helper to handle single uploaded file from $req->get_file_params()
+		$files = $req->get_file_params(); // associative array
+		if ( ! empty( $files['id_file'] ) && isset( $files['id_file']['tmp_name'] ) ) {
+			$file = $files['id_file'];
+			$move = wp_handle_upload( $file, array( 'test_form' => false ) );
+			if ( ! empty( $move['url'] ) ) {
+				$uploaded_id_url = esc_url_raw( $move['url'] );
+			}
+		}
+		if ( ! empty( $files['id_photo_capture'] ) && isset( $files['id_photo_capture']['tmp_name'] ) ) {
+			$file = $files['id_photo_capture'];
+			$move = wp_handle_upload( $file, array( 'test_form' => false ) );
+			if ( ! empty( $move['url'] ) ) {
+				$uploaded_capture_url = esc_url_raw( $move['url'] );
+			}
+		}
+		if ( ! empty( $files['proof_file'] ) && isset( $files['proof_file']['tmp_name'] ) ) {
+			$file = $files['proof_file'];
+			$move = wp_handle_upload( $file, array( 'test_form' => false ) );
+			if ( ! empty( $move['url'] ) ) {
+				$uploaded_proof_url = esc_url_raw( $move['url'] );
+			}
+		}
+
+		// prepare JSON blobs
+		$for_rental       = null;
+		$for_verification = null;
+
+		$rental = array(
+			'gender'            => sanitize_text_field( $req->get_param( 'gender' ) ?: '' ),
+			'date_of_birth'     => sanitize_text_field( $req->get_param( 'date_of_birth' ) ?: '' ),
+			'address_line1'     => sanitize_text_field( $req->get_param( 'address_line1' ) ?: '' ),
+			'address_line2'     => sanitize_text_field( $req->get_param( 'address_line2' ) ?: '' ),
+			'city'              => sanitize_text_field( $req->get_param( 'city' ) ?: '' ),
+			'state'             => sanitize_text_field( $req->get_param( 'state' ) ?: '' ),
+			'zip'               => sanitize_text_field( $req->get_param( 'zip' ) ?: '' ),
+			'prior_turbotenant' => sanitize_text_field( $req->get_param( 'prior_turbotenant' ) ?: '' ),
+			// add anything else you want to keep
+		);
+		$for_rental = wp_json_encode( $rental );
+
+		// additional top-level rental columns
+		$emergency_name  = sanitize_text_field( $req->get_param( 'emergency_name' ) ?: '' );
+		$emergency_phone = sanitize_text_field( $req->get_param( 'emergency_phone' ) ?: '' );
+
+		$now = current_time( 'mysql' );
+
+		$existing = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$tbl} WHERE applicant_id = %d LIMIT 1",
+				intval( $user->ID )
+			)
+		);
+
+		if ( $existing ) {
+			// update existing row
+			$update = array(
+				'need_housing'           => 'yes',
+				'full_name'              => $full_name ?: null,
+				'phone'                  => $phone ?: null,
+				'move_in_date'           => $move_in_date ?: null,
+				'emergency_name'         => $emergency_name ?: null,
+				'emergency_phone'        => $emergency_phone ?: null,
+				'id_file_url'            => $uploaded_id_url ?: $existing->id_file_url, // keep old if no new
+				'id_photo_capture_url'   => $uploaded_capture_url ?: $existing->id_photo_capture_url,
+				'verification_proof_url' => $uploaded_proof_url ?: $existing->verification_proof_url,
+				'status'             	 => 'pending',
+				'for_rental' 			 => $for_rental,
+				'for_verification'       => $for_verification,
+				'updated_at'             => current_time( 'mysql' ),
+			);
+
+			$where   = array( 'id' => intval( $existing->id ) );
+			$updated = $wpdb->update( $tbl, $update, $where );
+
+			if ( $updated === false ) {
+				return rest_ensure_response(
+					array(
+						'ok'    => false,
+						'error' => 'db_update_failed',
+					),
+					500
+				);
+			}
+
+			return rest_ensure_response(
+				array(
+					'ok'     => true,
+					'id'     => $existing->id,
+					'action' => 'updated',
+				)
+			);
+		} else {
+
+			$insert = array(
+				'applicant_id'           => intval( $user->ID ),
+				'need_housing'           => 'yes',
+				'full_name'              => $full_name ?: null,
+				'phone'                  => $phone ?: null,
+				'move_in_date'           => $move_in_date ?: null,
+				'emergency_name'         => $emergency_name ?: null,
+				'emergency_phone'        => $emergency_phone ?: null,
+				'id_file_url'            => $uploaded_id_url ?: null,
+				'id_photo_capture_url'   => $uploaded_capture_url ?: null,
+				'verification_proof_url' => $uploaded_proof_url ?: null,
+				'for_rental'             => $for_rental,
+				'for_verification'       => $for_verification,
+				'status'                 => 'pending',
+				'created_at'             => $now,
+			);
+
+			$ok = $wpdb->insert(
+				$tbl,
+				$insert,
+				array(
+					'%d',
+					'%s',
+					'%s',
+					'%s',
+					'%s',
+					'%s',
+					'%s',
+					'%s',
+					'%s',
+					'%s',
+					'%s',
+					'%s',
+					'%s',
+				)
+			);
+
+			if ( false === $ok ) {
+				return rest_ensure_response(
+					array(
+						'ok'    => false,
+						'error' => 'db_insert_failed',
+						'wpdb'  => $wpdb->last_error,
+					),
+					500
+				);
+			}
+
+			$new_id = $wpdb->insert_id;
+
+			return rest_ensure_response(
+				array(
+					'ok' => true,
+					'id' => $new_id,
+				)
+			);
+		}
+	}
+
+
+	/**
+	 * Verify of housing_handle_verify
+	 *
+	 * @param \WP_REST_Request $req
+	 * @return \WP_Error|\WP_REST_Response Response or error.
+	 */
+	public function housing_handle_verify( \WP_REST_Request $req ) {
+		global $wpdb;
+		$tbl = $wpdb->prefix . 'jamrock_housing_applications';
+
+		$user = wp_get_current_user();
+		if ( ! $user || ! $user->ID ) {
+			return rest_ensure_response(
+				array(
+					'ok'    => false,
+					'error' => 'not_logged_in',
+				),
+				403
+			);
+		}
+
+		// require wp file upload helpers
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+		require_once ABSPATH . 'wp-admin/includes/media.php';
+
+		// =============================
+		// 1. VALIDATION
+		// =============================
+		$provider_name  = sanitize_text_field( $req->get_param( 'provider_name' ) ?: '' );
+		$provider_email = sanitize_email( $req->get_param( 'provider_email' ) ?: '' );
+		$provider_phone = sanitize_text_field( $req->get_param( 'provider_phone' ) ?: '' );
+		$proof_type     = sanitize_text_field( $req->get_param( 'proof_type' ) ?: '' );
+
+		if ( empty( $provider_name ) ) {
+			return rest_ensure_response(
+				array(
+					'ok'    => false,
+					'error' => 'missing_provider_name',
+				),
+				400
+			);
+		}
+
+		// =============================
+		// 2. FILE UPLOAD
+		// =============================
+		$uploaded_proof_url = null;
+		$files              = $req->get_file_params();
+
+		if ( ! empty( $files['proof_file'] ) && isset( $files['proof_file']['tmp_name'] ) ) {
+			$move = wp_handle_upload( $files['proof_file'], array( 'test_form' => false ) );
+			if ( ! empty( $move['url'] ) ) {
+				$uploaded_proof_url = esc_url_raw( $move['url'] );
+			}
+		}
+
+		// =============================
+		// 3. BUILD VERIFICATION JSON
+		// =============================
+		$ver = array(
+			'provider_name'  => $provider_name,
+			'provider_email' => $provider_email,
+			'provider_phone' => $provider_phone,
+			'proof_type'     => $proof_type,
+			'address_line1'  => sanitize_text_field( $req->get_param( 'address_line1' ) ?: '' ),
+			'address_line2'  => sanitize_text_field( $req->get_param( 'address_line2' ) ?: '' ),
+			'city'           => sanitize_text_field( $req->get_param( 'city' ) ?: '' ),
+			'state'          => sanitize_text_field( $req->get_param( 'state' ) ?: '' ),
+			'zip'            => sanitize_text_field( $req->get_param( 'zip' ) ?: '' ),
+			'notes'          => sanitize_text_field( $req->get_param( 'notes' ) ?: '' ),
+		);
+
+		$for_verification = wp_json_encode( $ver );
+
+		// =============================
+		// 4. INSERT INTO DB
+		// =============================
+		$now = current_time( 'mysql' );
+
+		$insert = array(
+			'applicant_id'           => intval( $user->ID ),
+			'need_housing'           => 'no',
+			'full_name'              => null,
+			'phone'                  => null,
+			'move_in_date'           => null,
+			'emergency_name'         => null,
+			'emergency_phone'        => null,
+			'id_file_url'            => null,
+			'id_photo_capture_url'   => null,
+			'verification_proof_url' => $uploaded_proof_url ?: null,
+			'for_rental'             => null,
+			'for_verification'       => $for_verification,
+			'status'                 => 'pending',
+			'created_at'             => $now,
+		);
+
+		$update = array(
+			'applicant_id'           => intval( $user->ID ),
+			'need_housing'           => 'no',
+			'full_name'              => null,
+			'phone'                  => null,
+			'move_in_date'           => null,
+			'emergency_name'         => null,
+			'emergency_phone'        => null,
+			'id_file_url'            => null,
+			'id_photo_capture_url'   => null,
+			'verification_proof_url' => $uploaded_proof_url ?: null,
+			'for_rental'             => null,
+			'for_verification'       => $for_verification,
+			'status'                 => 'pending',
+			'updated_at'             => $now,
+		);
+
+		$existing = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$tbl} WHERE applicant_id = %d LIMIT 1",
+				intval( $user->ID )
+			)
+		);
+
+		if ( $existing ) {
+			// update existing row
+			$where   = array( 'id' => intval( $existing->id ) );
+			$updated = $wpdb->update( $tbl, $update, $where );
+
+			if ( $updated === false ) {
+				return rest_ensure_response(
+					array(
+						'ok'    => false,
+						'error' => 'db_update_failed',
+					),
+					500
+				);
+			}
+
+			return rest_ensure_response(
+				array(
+					'ok'     => true,
+					'id'     => $existing->id,
+					'action' => 'updated',
+				)
+			);
+		} else {
+
+			$wpdb->insert( $tbl, $insert );
+
+			if ( ! $wpdb->insert_id ) {
+				return rest_ensure_response(
+					array(
+						'ok'    => false,
+						'error' => 'db_insert_failed',
+					),
+					500
+				);
+			}
+
+			return rest_ensure_response(
+				array(
+					'ok'      => true,
+					'id'      => $wpdb->insert_id,
+					'message' => 'Verification submitted successfully.',
+				),
+				200
+			);
+		}
+	}
+
+	public function housing_update_status( $req ) {
+		global $wpdb;
+		$tbl = $wpdb->prefix . 'jamrock_housing_applications';
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return rest_ensure_response(
+				array(
+					'ok'    => false,
+					'error' => 'forbidden',
+				),
+				403
+			);
+		}
+
+		$id     = intval( $req->get_param( 'id' ) );
+		$status = sanitize_text_field( $req->get_param( 'status' ) );
+		if ( ! in_array( $status, array( 'pending', 'approved', 'rejected' ) ) ) {
+			return rest_ensure_response(
+				array(
+					'ok'    => false,
+					'error' => 'invalid_status',
+				),
+				400
+			);
+		}
+		$note = sanitize_text_field( $req->get_param( 'note' ) ?: '' );
+
+		$updated = $wpdb->update(
+			$tbl,
+			array(
+				'status'     => $status,
+				'updated_at' => current_time( 'mysql' ),
+			),
+			array( 'id' => $id )
+		);
+		if ( $updated === false ) {
+			return rest_ensure_response(
+				array(
+					'ok'    => false,
+					'error' => 'db_update_failed',
+				),
+				500
+			);
+		}
+
+		// Optional: send notification to applicant (wp_mail) - skipped here but recommended.
+
+		return rest_ensure_response(
+			array(
+				'ok'     => true,
+				'id'     => $id,
+				'status' => $status,
+			)
+		);
+	}
+
+
+	/**
+	 * GET list with pagination
+	 */
+	public function housing_list( \WP_REST_Request $req ) {
+		global $wpdb;
+		$tbl = $wpdb->prefix . 'jamrock_housing_applications';
+
+		$page   = max( 1, intval( $req->get_param( 'page' ) ?: 1 ) );
+		$per    = max( 1, intval( $req->get_param( 'per_page' ) ?: 20 ) );
+		$status = $req->get_param( 'status' ) ? sanitize_text_field( $req->get_param( 'status' ) ) : '';
+
+		// where
+		if ( $status ) {
+			$where_sql = $wpdb->prepare( 'WHERE status = %s', $status );
+		} else {
+			$where_sql = '';
+		}
+
+		$offset = ( $page - 1 ) * $per;
+
+		// get rows
+		$sql = $wpdb->prepare(
+			"SELECT h.*, u.display_name AS name, u.user_email AS email
+         FROM {$tbl} h
+         LEFT JOIN {$wpdb->users} u ON u.ID = h.applicant_id
+         {$where_sql}
+         ORDER BY h.created_at DESC
+         LIMIT %d OFFSET %d",
+			$per,
+			$offset
+		);
+
+		// if where_sql had a placeholder, $wpdb->prepare above may be wrong due to double prepare;
+		// Next: safer approach — handle where separately:
+		if ( $status ) {
+			// rebuild with correct prepare placeholder usage
+			$sql   = $wpdb->prepare(
+				"SELECT h.*, u.display_name AS name, u.user_email AS email
+             FROM {$tbl} h
+             LEFT JOIN {$wpdb->users} u ON u.ID = h.applicant_id
+             WHERE h.status = %s
+             ORDER BY h.created_at DESC
+             LIMIT %d OFFSET %d",
+				$status,
+				$per,
+				$offset
+			);
+			$total = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$tbl} WHERE status = %s", $status ) );
+		} else {
+			$sql   = $wpdb->prepare(
+				"SELECT h.*, u.display_name AS name, u.user_email AS email
+             FROM {$tbl} h
+             LEFT JOIN {$wpdb->users} u ON u.ID = h.applicant_id
+             ORDER BY h.created_at DESC
+             LIMIT %d OFFSET %d",
+				$per,
+				$offset
+			);
+			$total = $wpdb->get_var( "SELECT COUNT(*) FROM {$tbl}" );
+		}
+
+		$rows = $wpdb->get_results( $sql );
+		return rest_ensure_response(
+			array(
+				'ok'    => true,
+				'items' => $rows,
+				'total' => intval( $total ),
+			)
+		);
+	}
+
+	/**
+	 * GET single application
+	 */
+	public function housing_get_one( \WP_REST_Request $req ) {
+		global $wpdb;
+		$tbl = $wpdb->prefix . 'jamrock_housing_applications';
+		$id  = intval( $req->get_param( 'id' ) );
+
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT h.*, u.display_name AS name, u.user_email AS email FROM {$tbl} h LEFT JOIN {$wpdb->users} u ON u.ID = h.applicant_id WHERE h.id = %d", $id ), ARRAY_A );
+
+		if ( ! $row ) {
+			return new \WP_Error( 'not_found', 'Application not found', array( 'status' => 404 ) );
+		}
+
+		// decode JSON columns if present for ease of client rendering
+		if ( ! empty( $row['for_rental'] ) ) {
+			$row['for_rental'] = json_decode( $row['for_rental'], true );
+		}
+		if ( ! empty( $row['for_verification'] ) ) {
+			$row['for_verification'] = json_decode( $row['for_verification'], true );
+		}
+
+		return rest_ensure_response(
+			array(
+				'ok'   => true,
+				'item' => $row,
+			)
+		);
+	}
+
+	/**
+	 * POST update application status (approve / reject / pending)
+	 */
+	public function housing_update( \WP_REST_Request $req ) {
+		global $wpdb;
+		$tbl = $wpdb->prefix . 'jamrock_housing_applications';
+
+		$id     = intval( $req->get_param( 'id' ) );
+		$status = sanitize_text_field( $req->get_param( 'status' ) );
+		$reason = sanitize_text_field( $req->get_param( 'rejection_reason' ) ?: '' );
+
+		if ( ! in_array( $status, array( 'approved', 'rejected', 'pending', 'in_progress' ), true ) ) {
+			return new \WP_Error( 'invalid_status', 'Invalid status', array( 'status' => 400 ) );
+		}
+
+		$updated = $wpdb->update(
+			$tbl,
+			array(
+				'status'           => $status,
+				'rejection_reason' => $reason ?: null,
+				'updated_at'       => current_time( 'mysql' ),
+			),
+			array( 'id' => $id ),
+			array( '%s', '%s', '%s' ),
+			array( '%d' )
+		);
+
+		if ( false === $updated ) {
+			return new \WP_Error( 'db_error', 'DB update failed', array( 'status' => 500 ) );
+		}
+
+		// fetch row
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$tbl} WHERE id = %d", $id ), ARRAY_A );
+
+		// notify candidate by email
+		if ( ! empty( $row['applicant_id'] ) ) {
+			$user = get_userdata( intval( $row['applicant_id'] ) );
+			if ( $user && $user->user_email ) {
+				$to      = $user->user_email;
+				$subject = 'Housing application update';
+				$message = 'Hello ' . ( $user->display_name ?: $user->user_login ) . ",\n\n";
+				if ( $status === 'approved' ) {
+					$message .= "Your housing application has been approved. Congratulations!\n\n";
+				} elseif ( $status === 'rejected' ) {
+					$message .= "Your housing application has been rejected.\n\nReason: " . ( $reason ?: 'No reason provided.' ) . "\n\nPlease resubmit the form if appropriate or contact support.\n\n";
+				} else {
+					$message .= "Your housing application status has been updated to: $status.\n\n";
+				}
+				$message .= "Regards,\nRecruitment Team";
+
+				// headers
+				$headers = array( 'Content-Type: text/plain; charset=UTF-8' );
+				wp_mail( $to, $subject, $message, $headers );
+			}
+		}
+
+		return rest_ensure_response(
+			array(
+				'ok'   => true,
+				'item' => $row,
+			)
+		);
+	}
+
+	/**
+	 * Summary of update_payment_extension
+	 *
+	 * @param \WP_REST_Request $req
+	 * @return \WP_Error|\WP_REST_Response
+	 */
+	public function update_payment_extension( \WP_REST_Request $req ) {
+		global $wpdb;
+		$tbl = $wpdb->prefix . 'jamrock_housing_applications';
+
+		$applicant_id = intval( $req->get_param( 'id' ) );
+		if ( ! $applicant_id ) {
+			return rest_ensure_response(
+				array(
+					'ok'    => false,
+					'error' => 'invalid_id',
+				),
+				400
+			);
+		}
+
+		// Find row by applicant ID
+		$row = $wpdb->get_row(
+			$wpdb->prepare( "SELECT * FROM {$tbl} WHERE applicant_id = %d", $applicant_id ),
+			ARRAY_A
+		);
+
+		if ( ! $row ) {
+			return rest_ensure_response(
+				array(
+					'ok'    => false,
+					'error' => 'not_found',
+				),
+				404
+			);
+		}
+
+		// -----------------------------
+		// CLEAN INPUTS
+		// -----------------------------
+		$enabled = $req->get_param( 'enable' ) == '1' ? 1 : 0;
+
+		$expires = sanitize_text_field( $req->get_param( 'extended_until' ) ?: '' );
+		$due_on  = sanitize_text_field( $req->get_param( 'due_on' ) ?: '' );
+		$notes   = sanitize_textarea_field( $req->get_param( 'note' ) ?: '' );
+
+		// fields_json from admin modal (AcroForm fields)
+		$fields_json_raw = $req->get_param( 'fields_json' );
+		$fields_json     = array();
+
+		if ( $fields_json_raw ) {
+			$decoded = json_decode( stripslashes( $fields_json_raw ), true );
+			if ( is_array( $decoded ) ) {
+				$fields_json = $decoded;
+			}
+		}
+
+		// -----------------------------
+		// MERGE WITH EXISTING PAYMENT EXTENSION JSON
+		// -----------------------------
+		$existing = array();
+		if ( ! empty( $row['payment_extension'] ) ) {
+			$existing = json_decode( $row['payment_extension'], true );
+			if ( ! is_array( $existing ) ) {
+				$existing = array();
+			}
+		}
+
+		// Merge clean updated values
+		$updated = array(
+			'extension_enabled' => $enabled,
+			'extended_until'    => $expires,
+			'original_due_date' => $due_on,
+			'notes'             => $notes,
+			'updated_at'        => current_time( 'mysql' ),
+			'fields_json'       => $fields_json,
+		);
+
+		$final_json = wp_json_encode( $updated );
+
+		// -----------------------------
+		// UPDATE DATABASE
+		// -----------------------------
+		$wpdb->update(
+			$tbl,
+			array(
+				'extension_enabled' => $enabled,
+				'extended_until'    => $expires,
+				'original_due_date' => $due_on,
+				'notes'             => $notes,
+				'payment_extension' => $final_json,
+				'updated_at'        => current_time( 'mysql' ),
+			),
+			array( 'id' => $row['id'] )
+		);
+
+		return rest_ensure_response(
+			array(
+				'ok'   => true,
+				'item' => array(
+					'applicant_id'      => $applicant_id,
+					'payment_extension' => $updated,
+				),
 			)
 		);
 	}

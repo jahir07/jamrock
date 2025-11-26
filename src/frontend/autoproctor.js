@@ -36,8 +36,8 @@
     return {
       groupReportsIntoTabs: true,
       userDetails: {
-        name: JRJ_AP.userName || "Test User",
-        email: JRJ_AP.email || "test@test.com",
+        name: JRJ_AP.userName || "",
+        email: JRJ_AP.email || "",
       },
     };
   };
@@ -72,10 +72,8 @@
   async function stopProctoring() {
     if (stopped) return;
     stopped = true;
-    console.log("inst stop test1");
     try {
       await apInstance.stop();
-      console.log("inst stop test2");
 
       window.addEventListener("apMonitoringStopped", async () => {
         const reportOptions = getReportOptions();
@@ -91,28 +89,6 @@
     }
   }
 
-  // test fetch log
-  const body = {
-    quiz_id: 299,
-    attempt_id: "299yca4k",
-    event: "started", // or 'stopped' or 'violation'
-    payload: { note: "manual test" },
-    user: { name: "Test User", email: "test@example.com" },
-  };
-
-  fetch(JRJ_AP.root + "autoproctor/attempts", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: {
-      "X-WP-Nonce": JRJ_AP && JRJ_AP.nonce ? JRJ_AP.nonce : "", // if available
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-    keepalive: true,
-  }).then(async (r) => {
-    console.log("status", r.status);
-    console.log(await r.text());
-  });
     // -- safe fetch log ---
   function safeFetchLog(payload = {}, event = "started") {
     const body = {

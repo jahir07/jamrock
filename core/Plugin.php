@@ -11,7 +11,7 @@
 
 namespace Jamrock\Core;
 
-use Jamrock\Shortcodes\{LearnDash, Dashboard, Announcements, Feedback as FeedbackShortcode};
+use Jamrock\Shortcodes\{LearnDash, Dashboard, Announcements};
 
 /**
  * Class Plugin.
@@ -153,6 +153,8 @@ final class Plugin {
 		( new \Jamrock\Controllers\Applicants() )->hooks();
 		( new \Jamrock\Controllers\Webhooks() )->hooks();
 		( new \Jamrock\Controllers\Housing() )->hooks();
+		( new \Jamrock\Controllers\PaymentExtension() )->hooks();
+		( new \Jamrock\Controllers\Medical() )->hooks();
 		( new \Jamrock\Controllers\Logs() )->hooks();
 		( new \Jamrock\Controllers\Courses() )->hooks();
 
@@ -203,12 +205,7 @@ final class Plugin {
 			\Jamrock\Shortcodes\PsymetricsAssessmentIframe::register();
 
 			( new \Jamrock\Controllers\AutoproctorFrontend() )->hooks();
-			// \Jamrock\Shortcodes\FeedbackShortcode::register();
 
-		}
-
-		if ( $this->is_request( 'ajax' ) ) {
-			$this->container['feedback_ajax'] = new \Jamrock\Ajax\Feedback();
 		}
 	}
 
@@ -233,39 +230,6 @@ final class Plugin {
 			)
 		);
 	}
-
-	/**
-	 * Render the [jamrock_feedback_form] shortcode.
-	 *
-	 * This method delegates rendering of the feedback form
-	 * to the Shortcode class and returns the generated HTML.
-	 *
-	 * @param array $attributes Shortcode attributes passed from WordPress.
-	 * @return string Rendered HTML of the feedback form.
-	 */
-	// public function render_form($attributes)
-	// {
-	// $shortcode = new FeedbackShortcode();
-	// $result = $shortcode->render_feedback_form_shortcode($attributes);
-
-	// return $result;
-	// }
-
-	// /**
-	// * Render the [jamrock_result] shortcode.
-	// *
-	// * This method creates an instance of the Shortcode class
-	// * and delegates rendering of feedback results to it.
-	// *
-	// * @param array $attributes Shortcode attributes passed from WordPress.
-	// * @return string Rendered HTML output of the feedback results.
-	// */
-	// public function render_result($attributes)
-	// {
-	// $shortcode = new FeedbackShortcode();
-	// return $shortcode->render_feedback_results_shortcode($attributes);
-	// }
-
 
 	/**
 	 * Check the current request type.

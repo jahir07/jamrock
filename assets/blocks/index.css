@@ -1,1 +1,115 @@
-.alert-msg{font-size:12px;margin-top:5px}.feedback-area h3{font-size:1.4em;text-align:center}.jamrock-feedback-section.jamrock-feedback-section{box-shadow:0 0 20px 6px hsla(0,0%,80%,.231);padding:30px 15px}.jamrock-feedback-section.jamrock-feedback-section h2{background:red;color:#fff;font-size:26px;letter-spacing:5px;padding:10px;text-align:center;text-transform:uppercase;word-spacing:8px}.action-btn{background-color:#ba0000;padding:8px 40px}.jamrock-feedback-results{font-size:16px}.jamrock-feedback-results h2{background:#000507;color:#fff;font-size:2.6em;font-weight:900;line-height:1;padding:10px;text-align:center}.list-heading{background:#7200dd;color:#fff;font-weight:700;padding:5px 15px}.list-heading li{min-width:100px;width:25%}.list-result{background:rgba(233,210,255,.259);font-size:14px;padding:5px 15px}.list-result:nth-child(2n){background:#fafafa}.list-result li{cursor:pointer;min-width:100px;width:25%}.details-block h2{background:#0790aa;color:#fff;font-size:1.5em;letter-spacing:3px;line-height:1;padding:9px;text-align:center;text-transform:uppercase;word-spacing:20px}.details-list li{font-size:16px;line-height:2.3}.details-list li span{display:inline-block;width:100px}.pagination{display:flex;justify-content:center;margin-top:40px}.pagination a,.pagination span{background:red;color:#fff;display:flex;margin:5px;padding:4px 15px;text-decoration:none}.pagination .page-numbers.current{background:#ad0606}
+/*!**************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ../../node_modules/.pnpm/css-loader@6.11.0_webpack@5.102.1/node_modules/css-loader/dist/cjs.js??ruleSet[1].rules[3].use[1]!../../node_modules/.pnpm/postcss-loader@6.2.1_postcss@8.5.6_webpack@5.102.1/node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[3].use[2]!../../node_modules/.pnpm/sass-loader@12.6.0_sass@1.93.2_webpack@5.102.1/node_modules/sass-loader/dist/cjs.js??ruleSet[1].rules[3].use[3]!./form/editor.scss ***!
+  \**************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************/
+/**
+ * The following styles get applied inside the editor only.
+ *
+ * Replace them with your own styles or remove the file completely.
+ */
+.alert-msg {
+  font-size: 12px;
+  margin-top: 5px;
+}
+
+.feedback-area h3 {
+  font-size: 1.4em;
+  text-align: center;
+}
+
+.jamrock-feedback-section.jamrock-feedback-section {
+  box-shadow: 0 0 20px 6px rgba(204, 204, 204, 0.231372549);
+  padding: 30px 15px;
+}
+.jamrock-feedback-section.jamrock-feedback-section h2 {
+  font-size: 26px;
+  text-align: center;
+  padding: 10px;
+  background: red;
+  color: #fff;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  word-spacing: 8px;
+}
+
+.action-btn {
+  background-color: rgb(186, 0, 0);
+  padding: 8px 40px;
+}
+
+.jamrock-feedback-results {
+  font-size: 16px;
+}
+.jamrock-feedback-results h2 {
+  font-size: 2.6em;
+  font-weight: 900;
+  background: #000507;
+  color: #fff;
+  text-align: center;
+  padding: 10px;
+  line-height: 1;
+}
+
+.list-heading {
+  background: rgb(114, 0, 221);
+  padding: 5px 15px;
+  color: #fff;
+  font-weight: bold;
+}
+.list-heading li {
+  width: 25%;
+  min-width: 100px;
+}
+
+.list-result {
+  background: rgba(233, 210, 255, 0.2588235294);
+  font-size: 14px;
+  padding: 5px 15px;
+}
+.list-result:nth-child(even) {
+  background: #fafafa;
+}
+.list-result li {
+  width: 25%;
+  min-width: 100px;
+  cursor: pointer;
+}
+
+.details-block h2 {
+  font-size: 1.5em;
+  background: #0790aa;
+  color: #fff;
+  padding: 9px;
+  letter-spacing: 3px;
+  word-spacing: 20px;
+  text-align: center;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.details-list li {
+  line-height: 2.3;
+  font-size: 16px;
+}
+.details-list li span {
+  width: 100px;
+  display: inline-block;
+}
+
+.pagination {
+  margin-top: 40px;
+  display: flex;
+  justify-content: center;
+}
+.pagination a, .pagination span {
+  padding: 4px 15px;
+  background: red;
+  display: flex;
+  color: #fff;
+  text-decoration: none;
+  margin: 5px;
+}
+.pagination .page-numbers.current {
+  background: #ad0606;
+}
+
+/*# sourceMappingURL=index.css.map*/

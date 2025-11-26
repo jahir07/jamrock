@@ -72,8 +72,6 @@ class Admin {
 		$add( __( 'Courses', 'jamrock' ), 'courses' );
 		$add( __( 'Applicants', 'jamrock' ), 'applicantswithcomposite' );
 		$add( __( 'Assessments', 'jamrock' ), 'assessments' );
-		$add( __( 'Housing', 'jamrock' ), 'housing' );
-		$add( __( 'Feedback', 'jamrock' ), 'feedback' );
 
 		// add CPT link *manually* to point at edit.php?post_type=jrj_announcement
 		// This will appear under Jamrock menu and link to the CPT list screen.
@@ -99,7 +97,7 @@ class Admin {
 		echo '<div id="jamrock-admin-app"></div>';
 
 		$view    = isset( $_GET['view'] ) ? sanitize_key( wp_unslash( $_GET['view'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$allowed = array( 'dashboard', 'settings', 'courses', 'housing', 'applicants', 'assessments', 'feedback', 'logs', 'info' );
+		$allowed = array( 'dashboard', 'settings', 'courses', 'housing', 'applicantswithcomposite', 'assessments', 'feedback', 'logs', 'info' );
 		if ( ! in_array( $view, $allowed, true ) ) {
 			$view = 'dashboard'; // default tab.
 		}
