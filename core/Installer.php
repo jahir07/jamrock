@@ -313,6 +313,8 @@ class Installer {
 			has_conditions VARCHAR(8) DEFAULT 'no' NOT NULL,
 			details LONGTEXT NULL,
 			status VARCHAR(32) DEFAULT 'submitted' NOT NULL,
+			medical_clearance_file VARCHAR(325) DEFAULT NULL,
+			medical_clearance_status VARCHAR(32) DEFAULT 'pending' NOT NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NULL,
 			PRIMARY KEY (id),

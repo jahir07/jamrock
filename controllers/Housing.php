@@ -284,8 +284,8 @@ class Housing {
 				'id_file_url'            => $uploaded_id_url ?: $existing->id_file_url, // keep old if no new
 				'id_photo_capture_url'   => $uploaded_capture_url ?: $existing->id_photo_capture_url,
 				'verification_proof_url' => $uploaded_proof_url ?: $existing->verification_proof_url,
-				'status'             	 => 'pending',
-				'for_rental' 			 => $for_rental,
+				'status'                 => 'pending',
+				'for_rental'             => $for_rental,
 				'for_verification'       => $for_verification,
 				'updated_at'             => current_time( 'mysql' ),
 			);
@@ -802,7 +802,10 @@ class Housing {
 		// -----------------------------
 		// CLEAN INPUTS
 		// -----------------------------
-		$enabled = $req->get_param( 'enable' ) == '1' ? 1 : 0;
+		$enabled          = $req->get_param( 'enable' ) == '1' ? 1 : 0;
+		$agreement_enable = $req->get_param( 'agreement_enable' ) == '1' ? 1 : 0;
+
+		$enabled = $agreement_enable ? 1 : $enabled; // if agreement_enable is set, force enable.
 
 		$expires = sanitize_text_field( $req->get_param( 'extended_until' ) ?: '' );
 		$due_on  = sanitize_text_field( $req->get_param( 'due_on' ) ?: '' );

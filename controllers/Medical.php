@@ -2,39 +2,113 @@
 /**
  * REST controller for medical affidavit submissions.
  *
- * Namespace: Jamrock\Controller
- *
- * Drop this file into your plugin and instantiate the class and call hooks().
+ * @package Jamrock
  */
 
 namespace Jamrock\Controllers;
 
-defined( 'ABSPATH' ) || exit;
+defined('ABSPATH') || exit;
 
-class Medical {
+use WP_REST_Request;
+use WP_Error;
+
+/**
+ * Class Medical
+ */
+class Medical
+{
 
 	/**
-	 * Register top-level hooks.
+	 * Table name.
+	 *
+	 * @var string
 	 */
-	public function hooks(): void {
-		add_action( 'rest_api_init', array( $this, 'routes' ) );
+	protected $table;
+
+	/**
+	 * Cache group.
+	 *
+	 * @var string
+	 */
+	protected $cache_group = 'jamrock_medical';
+
+	/**
+	 * Constructor.
+	 */
+	public function __construct()
+	{
+		global $wpdb;
+		$this->table = $wpdb->prefix . 'jamrock_medical_affidavits';
+	}
+
+	/**
+	 * Register hooks.
+	 */
+	public function hooks(): void
+	{
+		add_action('rest_api_init', array($this, 'routes'));
 	}
 
 	/**
 	 * Register REST routes.
 	 */
-	public function routes(): void {
+	public function routes(): void
+	{
+		// Route 1: Get Data.
+		register_rest_route(
+			'jamrock/v1',
+			'/medical/affidavit/find',
+			array(
+				'methods' => 'GET',
+				'permission_callback' => array($this, 'permission_read'),
+				'callback' => array($this, 'rest_affidavit_find'),
+				'args' => array(
+					'applicant_id' => array(
+						'required' => true,
+						'validate_callback' => function ($param) {
+							return is_numeric($param);
+						},
+					),
+				),
+			)
+		);
+
+		// Route 2: Save Medical History (Affidavit).
 		register_rest_route(
 			'jamrock/v1',
 			'/medical/affidavit',
 			array(
-				'methods'             => 'POST',
-				'permission_callback' => array( $this, 'permission' ),
-				'callback'            => array( $this, 'rest_medical_affidavit' ),
-				'args'                => array(
-					'applicant_id' => array(
+				'methods' => 'POST',
+				'permission_callback' => array($this, 'permission_save'),
+				'callback' => array($this, 'rest_save_history'),
+			)
+		);
+
+		// Route 3: Save Medical Clearance Data (New).
+		register_rest_route(
+			'jamrock/v1',
+			'/medical/clearance',
+			array(
+				'methods' => 'POST',
+				'permission_callback' => array($this, 'permission_save'),
+				'callback' => array($this, 'rest_save_clearance'),
+			)
+		);
+
+		// Route 4: Upload File.
+		register_rest_route(
+			'jamrock/v1',
+			'/medical/affidavit/(?P<id>\d+)/upload',
+			array(
+				'methods' => 'POST',
+				'permission_callback' => array($this, 'permission_upload'),
+				'callback' => array($this, 'rest_affidavit_upload'),
+				'args' => array(
+					'id' => array(
 						'required' => true,
-						'type'     => 'integer',
+						'validate_callback' => function ($param) {
+							return is_numeric($param);
+						},
 					),
 				),
 			)
@@ -42,123 +116,328 @@ class Medical {
 	}
 
 	/**
-	 * Permission check for submitting an affidavit.
+	 * Helper: Fetch row with Caching.
 	 *
-	 * Adjust capability logic to match your app (applicant mapping to WP users, roles, etc.)
-	 *
-	 * @param \WP_REST_Request $request
-	 * @return bool|\WP_Error
+	 * @param int $applicant_id The applicant ID.
+	 * @return object|null Row object or null.
 	 */
-	public function permission( \WP_REST_Request $request ) {
-		$applicant_id = (int) $request->get_param( 'applicant_id' );
+	protected function get_cached_row($applicant_id)
+	{
+		global $wpdb;
+		$cache_key = 'affidavit_' . $applicant_id;
+		$row = wp_cache_get($cache_key, $this->cache_group);
 
-		// Basic check: only allow if current user can edit that applicant (adapt as needed).
-		if ( $applicant_id > 0 && current_user_can( 'edit_user', $applicant_id ) ) {
+		if (false === $row) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$row = $wpdb->get_row(
+				$wpdb->prepare("SELECT * FROM " . $this->table . " WHERE applicant_id = %d ORDER BY created_at DESC LIMIT 1", $applicant_id)
+			);
+			wp_cache_set($cache_key, $row, $this->cache_group, 3600); // Cache for 1 hour.
+		}
+
+		return $row;
+	}
+
+	/**
+	 * Helper: Delete Cache.
+	 *
+	 * @param int $applicant_id The applicant ID.
+	 */
+	protected function flush_cache($applicant_id)
+	{
+		wp_cache_delete('affidavit_' . $applicant_id, $this->cache_group);
+	}
+
+	/**
+	 * Permission: Read.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return bool|WP_Error
+	 */
+	public function permission_read(WP_REST_Request $request)
+	{
+		$applicant_id = (int) $request->get_param('applicant_id');
+		$current_user_id = get_current_user_id();
+
+		if (!$current_user_id) {
+			return new WP_Error('rest_forbidden', 'You must be logged in.', array('status' => 401));
+		}
+		if (current_user_can('manage_options') || current_user_can('edit_users')) {
+			return true;
+		}
+		if ($current_user_id === $applicant_id) {
+			return true;
+		}
+		return new WP_Error('rest_forbidden', 'Permission denied.', array('status' => 403));
+	}
+
+	/**
+	 * Permission: Save.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return bool|WP_Error
+	 */
+	public function permission_save(WP_REST_Request $request)
+	{
+		$current_user_id = get_current_user_id();
+		if (!$current_user_id) {
+			return new WP_Error('rest_forbidden', 'You must be logged in.', array('status' => 401));
+		}
+
+		$nonce = $request->get_header('x_wp_nonce');
+		if (!$nonce || !wp_verify_nonce($nonce, 'wp_rest')) {
+			return new WP_Error('rest_forbidden', 'Invalid nonce.', array('status' => 403));
+		}
+
+		$body = $request->get_json_params();
+		$applicant_id = isset($body['applicant_id']) ? (int) $body['applicant_id'] : 0;
+
+		if (current_user_can('manage_options')) {
+			return true;
+		}
+		if ($current_user_id === $applicant_id) {
+			return true;
+		}
+		return new WP_Error('rest_forbidden', 'Permission denied.', array('status' => 403));
+	}
+
+	/**
+	 * Permission: Upload.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return bool|WP_Error
+	 */
+	public function permission_upload(WP_REST_Request $request)
+	{
+		$current_user_id = get_current_user_id();
+		if (!$current_user_id) {
+			return new WP_Error('rest_forbidden', 'You must be logged in.', array('status' => 401));
+		}
+
+		$nonce = $request->get_header('x_wp_nonce');
+		if (!$nonce || !wp_verify_nonce($nonce, 'wp_rest')) {
+			return new WP_Error('rest_forbidden', 'Invalid nonce.', array('status' => 403));
+		}
+
+		if (current_user_can('manage_options')) {
 			return true;
 		}
 
-		return new \WP_Error(
-			'rest_forbidden',
-			__( 'You do not have permission to submit a medical affidavit for this applicant.', 'jamrock' ),
-			array( 'status' => 403 )
+		$affidavit_id = (int) $request->get_param('id');
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$owner_id = $wpdb->get_var(
+			$wpdb->prepare("SELECT applicant_id FROM " . $this->table . " WHERE id = %d", $affidavit_id)
+		);
+
+		if ((int) $owner_id === $current_user_id) {
+			return true;
+		}
+		return new WP_Error('rest_forbidden', 'Permission denied.', array('status' => 403));
+	}
+
+	/**
+	 * GET Callback.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return \WP_REST_Response
+	 */
+	public function rest_affidavit_find(WP_REST_Request $req)
+	{
+		$applicant_id = (int) $req->get_param('applicant_id');
+		$row = $this->get_cached_row($applicant_id);
+
+		return rest_ensure_response(
+			array(
+				'ok' => true,
+				'item' => $row,
+			)
 		);
 	}
 
 	/**
-	 * Handle POST /jamrock/v1/medical/affidavit
+	 * Common Save Logic.
 	 *
-	 * Stores entire submitted form (except applicant_id) as JSON in `details`.
-	 *
-	 * @param \WP_REST_Request $req
-	 * @return \WP_Error|\WP_REST_Response
+	 * @param int    $applicant_id ID.
+	 * @param string $has_cond 'yes'/'no'.
+	 * @param array  $new_data Data to merge.
+	 * @param string $data_key Key to merge into ('medical_history' or 'medical_clearance_data').
+	 * @return array Result.
 	 */
-	public function rest_medical_affidavit( \WP_REST_Request $req ) {
-
+	private function perform_save($applicant_id, $has_cond, $new_data, $data_key)
+	{
 		global $wpdb;
 
-		$table = $wpdb->prefix . 'jamrock_medical_affidavits';
+		$existing = $this->get_cached_row($applicant_id);
+		$details = array();
 
-		$body = $req->get_json_params() ?: array();
-
-		// applicant_id: required and validated already in route args, but double-check
-		$applicant_id = (int) ( $body['applicant_id'] ?? 0 );
-		if ( $applicant_id <= 0 ) {
-			return new \WP_Error( 'invalid_applicant', 'Invalid applicant_id.', array( 'status' => 400 ) );
+		if ($existing && !empty($existing->details)) {
+			$decoded = json_decode($existing->details, true);
+			if (is_array($decoded)) {
+				$details = $decoded;
+			}
 		}
 
-		// has_conditions: only allow 'yes' or 'no'
-		$has_raw = strtolower( (string) ( $body['has_conditions'] ?? 'no' ) );
-		$has     = in_array( $has_raw, array( 'yes', 'no' ), true ) ? $has_raw : 'no';
+		// MERGE LOGIC: Only update the specific key.
+		$details[$data_key] = $new_data;
 
-		// Prepare the "details" JSON: take the submitted body, remove applicant_id, sanitize recursively
-		$details_arr = $body;
-		unset( $details_arr['applicant_id'] );
-
-		// recursive sanitizer
+		// Recursive Sanitization.
 		$sanitize_recursive = null;
-		$sanitize_recursive = function ( $value ) use ( &$sanitize_recursive ) {
-			if ( is_array( $value ) ) {
-				$san = array();
-				foreach ( $value as $k => $v ) {
-					$san[ $k ] = $sanitize_recursive( $v );
+		$sanitize_recursive = function ($data) use (&$sanitize_recursive) {
+			if (is_array($data)) {
+				foreach ($data as $k => $v) {
+					$data[$k] = $sanitize_recursive($v);
 				}
-				return $san;
+				return $data;
 			}
-
-			if ( is_string( $value ) ) {
-				// use textarea sanitizer for longer user input
-				return sanitize_textarea_field( $value );
-			}
-
-			// leave numbers / booleans as-is
-			return $value;
+			return is_string($data) ? sanitize_text_field($data) : $data;
 		};
+		$clean_details = $sanitize_recursive($details);
 
-		$sanitized_details = $sanitize_recursive( $details_arr );
-
-		// Encode to JSON (safe for longtext)
-		$details_json = wp_json_encode( $sanitized_details );
-
-		$inserted = $wpdb->insert(
-			$table,
-			array(
-				'applicant_id'   => $applicant_id,
-				'has_conditions' => $has,
-				'details'        => $details_json,
-				'status'         => 'submitted',
-				'created_at'     => current_time( 'mysql' ),
-			),
-			array(
-				'%d',
-				'%s',
-				'%s',
-				'%s',
-				'%s',
-			)
+		$data_db = array(
+			'applicant_id' => $applicant_id,
+			'has_conditions' => $has_cond,
+			'details' => wp_json_encode($clean_details),
+			'status' => 'submitted',
 		);
 
-		if ( false === $inserted ) {
-			return new \WP_Error( 'db_error', 'Database insert failed.', array( 'status' => 500 ) );
+		$format = array('%d', '%s', '%s', '%s');
+
+		if ($existing) {
+			$data_db['updated_at'] = current_time('mysql');
+			$format[] = '%s';
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$updated = $wpdb->update($this->table, $data_db, array('id' => $existing->id), $format, array('%d'));
+			$id = $existing->id;
+		} else {
+			$data_db['created_at'] = current_time('mysql');
+			$data_db['medical_clearance_status'] = 'pending';
+			$format[] = '%s';
+			$format[] = '%s';
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$updated = $wpdb->insert($this->table, $data_db, $format);
+			$id = $wpdb->insert_id;
 		}
 
-		$insert_id = (int) $wpdb->insert_id;
+		if (false === $updated) {
+			return array('error' => true);
+		}
 
-		// If applicant has conditions, trigger downstream processing
-		if ( 'yes' === $has ) {
-			/**
-			 * Hook: jrj_medical_requires_clearance
-			 *
-			 * @param int $applicant_id
-			 * @param int $affidavit_id - inserted row id
-			 */
-			do_action( 'jrj_medical_requires_clearance', $applicant_id, $insert_id );
+		// Invalidate cache.
+		$this->flush_cache($applicant_id);
+
+		return array(
+			'ok' => true,
+			'id' => $id,
+			'details' => $clean_details,
+		);
+	}
+
+	/**
+	 * SAVE HISTORY Callback.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function rest_save_history(WP_REST_Request $req)
+	{
+		$body = $req->get_json_params();
+		$applicant_id = isset($body['applicant_id']) ? (int) $body['applicant_id'] : 0;
+		$has_cond = isset($body['has_conditions']) && 'yes' === strtolower($body['has_conditions']) ? 'yes' : 'no';
+		$incoming = isset($body['details']['medical_history']) ? (array) $body['details']['medical_history'] : array();
+
+		$res = $this->perform_save($applicant_id, $has_cond, $incoming, 'medical_history');
+
+		if (isset($res['error'])) {
+			return new WP_Error('db_error', 'Could not save history.', array('status' => 500));
+		}
+		return rest_ensure_response($res);
+	}
+
+	/**
+	 * SAVE CLEARANCE Callback.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function rest_save_clearance(WP_REST_Request $req)
+	{
+		$body = $req->get_json_params();
+		$applicant_id = isset($body['applicant_id']) ? (int) $body['applicant_id'] : 0;
+		// Keep existing has_conditions if not sent, or default to yes (usually implied if saving clearance).
+		$has_cond = 'yes';
+		$incoming = isset($body['details']['medical_clearance_data']) ? (array) $body['details']['medical_clearance_data'] : array();
+
+		$res = $this->perform_save($applicant_id, $has_cond, $incoming, 'medical_clearance_data');
+
+		if (isset($res['error'])) {
+			return new WP_Error('db_error', 'Could not save clearance data.', array('status' => 500));
+		}
+		return rest_ensure_response($res);
+	}
+
+	/**
+	 * UPLOAD Callback.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function rest_affidavit_upload(WP_REST_Request $req)
+	{
+		$id = (int) $req->get_param('id');
+
+		if (empty($_FILES) || !isset($_FILES['file'])) {
+			return new WP_Error('no_file', 'No file uploaded.', array('status' => 400));
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/media.php';
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+
+		$file = $_FILES['file']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		$overrides = array('test_form' => false);
+
+		add_filter(
+			'upload_mimes',
+			function ($mimes) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+				return array('pdf' => 'application/pdf');
+			}
+		);
+
+		$movefile = wp_handle_upload($file, $overrides);
+
+		if (isset($movefile['error'])) {
+			return new WP_Error('upload_error', $movefile['error'], array('status' => 500));
+		}
+
+		$file_url = $movefile['url'];
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->update(
+			$this->table,
+			array(
+				'medical_clearance_file' => $file_url,
+				'medical_clearance_status' => 'submitted',
+				'updated_at' => current_time('mysql'),
+			),
+			array('id' => $id),
+			array('%s', '%s', '%s'),
+			array('%d')
+		);
+
+		// Invalidate cache for this row.
+		// We need applicant_id to flush cache correctly.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$applicant_id = $wpdb->get_var($wpdb->prepare("SELECT applicant_id FROM " . $this->table . " WHERE id = %d", $id));
+		if ($applicant_id) {
+			$this->flush_cache($applicant_id);
 		}
 
 		return rest_ensure_response(
 			array(
-				'ok'  => true,
-				'id'  => $insert_id,
-				'msg' => 'Affidavit saved.',
+				'ok' => true,
+				'medical_clearance_file' => $file_url,
 			)
 		);
 	}

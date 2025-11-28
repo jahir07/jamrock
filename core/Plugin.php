@@ -163,8 +163,6 @@ final class Plugin {
 		( new \Jamrock\Controllers\Autoproctoring() )->hooks();
 		( new \Jamrock\Controllers\AutoproctorLearndashMetaBox() )->hooks();
 
-		// ( new Feedback() )->hooks();
-
 		( new \Jamrock\Controllers\CoursesSync() )->hooks();
 		( new \Jamrock\Controllers\Dashboard() )->hooks();
 		( new \Jamrock\Controllers\GravityFormsListener() )->hooks();

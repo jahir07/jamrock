@@ -97674,16 +97674,10 @@ const CandidateProfile = {
     // checks currentApp first, then items array for any enabled extension
     const hasExtension = (0,vue__WEBPACK_IMPORTED_MODULE_0__.computed)(() => {
       // check current application
-      const ext1 = currentApp.value?.extension_enabled;
-      if (ext1 && Number(ext1) === 1) return true;
+      const ext1 = parsePaymentExtension(currentApp.value?.payment_extension).extension_enabled;
+      // const ext1 = currentApp.value?.extension_enabled;
 
-      // fallback: check items list (if populated elsewhere)
-      if (Array.isArray(items.value) && items.value.length > 0) {
-        for (const r of items.value) {
-          const ex = parsePaymentExtension(r?.payment_extension);
-          if (ex && Number(ex.extension_enabled) === 1) return true;
-        }
-      }
+      if (ext1 && Number(ext1) === 1) return true;
       return false;
     });
     const profileLoad = async () => {
@@ -98741,11 +98735,15 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var vue__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue */ "../../node_modules/.pnpm/vue@3.5.22_typescript@5.9.3/node_modules/vue/dist/vue.runtime.esm-bundler.js");
 /* harmony import */ var pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! pdfjs-dist */ "../../node_modules/.pnpm/pdfjs-dist@5.4.394/node_modules/pdfjs-dist/build/pdf.mjs");
 /* harmony import */ var pdf_lib__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! pdf-lib */ "../../node_modules/.pnpm/pdf-lib@1.17.1/node_modules/pdf-lib/es/index.js");
+/* PdfOverlayFiller.js
+   Vue 3 component — Overlay form for Medical History Affidavit.
+   - Fixed: Perfect alignment for PDF Export.
+   - Feature: Hides form and shows success message if Medical Clearance is submitted.
+*/
 
 
 
 
-// --- WORKER CONFIGURATION ---
 pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(/* asset import */ __webpack_require__(/*! pdfjs-dist/build/pdf.worker.mjs */ "../../node_modules/.pnpm/pdfjs-dist@5.4.394/node_modules/pdfjs-dist/build/pdf.worker.mjs"), __webpack_require__.b).toString();
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
   name: "PdfOverlayFiller",
@@ -98759,12 +98757,16 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
       type: String,
       required: false,
       default: "/wp-content/plugins/jamrock/assets/pdf/medical-history-acro-form.pdf"
+    },
+    clearancePdfUrl: {
+      type: String,
+      required: false,
+      default: "/wp-content/plugins/jamrock/assets/pdf/medical-clearance-certificate.pdf"
     }
   },
   setup(props) {
-    // --- STATE ---
+    // ---------- Core State ----------
     const scale = 1.5;
-    const fileInputRef = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(null);
     const canvasRef = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(null);
     const status = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)("idle");
     const currentPage = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(1);
@@ -98772,47 +98774,45 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
     let pagesData = [];
     const activePageStyle = (0,vue__WEBPACK_IMPORTED_MODULE_0__.reactive)({
       width: "0px",
-      height: "0px"
+      height: "0px",
+      position: "relative"
     });
     const fields = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)([]);
-
-    // Load from LocalStorage
-    const storageKey = `pdf_data_${props.applicantId}`;
-    const savedData = localStorage.getItem(storageKey);
-    const formData = (0,vue__WEBPACK_IMPORTED_MODULE_0__.reactive)(savedData ? JSON.parse(savedData) : {});
+    const formData = (0,vue__WEBPACK_IMPORTED_MODULE_0__.reactive)({});
+    const showErrors = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(false);
     let rawPdfBytes = null;
+    const currentTemplate = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)("history");
 
-    // --- MODAL STATE ---
+    // Affidavit Server Data
+    const affidavit = (0,vue__WEBPACK_IMPORTED_MODULE_0__.reactive)({
+      id: null,
+      has_conditions: "no",
+      status: null,
+      // General status
+      details: null,
+      medical_clearance_file: null,
+      medical_clearance_status: "pending",
+      // Added this field
+      clearance_template_url: null
+    });
+    const suppressAutoHas = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(false);
+    const uploadInputRef = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(null);
+    const saving = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(false);
+
+    // Modal State
     const modal = (0,vue__WEBPACK_IMPORTED_MODULE_0__.reactive)({
       show: false,
-      type: "info",
-      // 'confirm' or 'error'
       title: "",
       message: "",
+      type: "info",
       confirmText: "OK",
       onConfirm: null
     });
-
-    // --- WATCHER ---
-    (0,vue__WEBPACK_IMPORTED_MODULE_0__.watch)(formData, newVal => {
-      localStorage.setItem(storageKey, JSON.stringify(newVal));
-    }, {
-      deep: true
-    });
-
-    // --- LIFECYCLE ---
-    (0,vue__WEBPACK_IMPORTED_MODULE_0__.onMounted)(() => {
-      if (props.pdfUrl) loadPdfFromUrl(props.pdfUrl);
-    });
-
-    // --- METHODS ---
-
-    const showModal = (type, title, message, confirmText, callback = null) => {
+    const showModal = (type, title, message, cb = null) => {
       modal.type = type;
       modal.title = title;
       modal.message = message;
-      modal.confirmText = confirmText;
-      modal.onConfirm = callback;
+      modal.onConfirm = cb;
       modal.show = true;
     };
     const closeModal = () => {
@@ -98823,86 +98823,314 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
       if (modal.onConfirm) modal.onConfirm();
       closeModal();
     };
-    const performClear = () => {
-      Object.keys(formData).forEach(key => delete formData[key]);
-      localStorage.removeItem(storageKey);
-      fields.value.forEach(f => {
-        if (f.type === "checkbox") formData[f.name] = false;else formData[f.name] = "";
-      });
+
+    // ---------- API Helpers ----------
+    const apiBase = typeof JRJ_ADMIN !== "undefined" && JRJ_ADMIN.root ? JRJ_ADMIN.root : "/wp-json/jamrock/v1/";
+    const defaultHeaders = () => {
+      const h = {};
+      if (typeof JRJ_ADMIN !== "undefined" && JRJ_ADMIN.nonce) h["X-WP-Nonce"] = JRJ_ADMIN.nonce;
+      return h;
     };
-    const requestClearForm = () => {
-      showModal("confirm", "Clear Entire Form?", "Are you sure you want to clear all fields? This action cannot be undone.", "Yes, Clear Form", performClear);
+    async function safeFetch(url, opts = {}) {
+      opts.credentials = opts.credentials || "same-origin";
+      opts.headers = {
+        ...(opts.headers || {}),
+        ...defaultHeaders()
+      };
+      const res = await fetch(url, opts);
+      let j = null;
+      try {
+        j = await res.json();
+      } catch (e) {
+        j = null;
+      }
+      return {
+        ok: res.ok,
+        status: res.status,
+        json: j,
+        raw: res
+      };
+    }
+    const getApplicantId = () => {
+      const p = Number(props.applicantId) || 0;
+      if (p > 0) return p;
+      return Number(window?.JRJ_USER?.id) || Number(window?.JRJ_ADMIN?.user_id) || 0;
     };
 
-    // --- VALIDATION LOGIC ---
-    const validateAndDownload = () => {
-      // 1. Get all unique field names from the PDF
-      const allFieldNames = [...new Set(fields.value.map(f => f.name))];
-      const missingFields = [];
-      allFieldNames.forEach(name => {
-        const val = formData[name];
-
-        // Check if field is empty or undefined
-        // For checkboxes (boolean), false is considered "filled" (unchecked),
-        // so we primarily check for empty strings (text/radio) or null/undefined.
-        // If you require specific checkboxes to be checked, you'd need extra logic.
-        if (val === undefined || val === "" || val === null) {
-          missingFields.push(name);
+    // ---------- Data Fetching ----------
+    const fetchAffidavitForApplicant = async () => {
+      try {
+        const appId = getApplicantId();
+        if (!appId) return;
+        const url = `${apiBase}medical/affidavit/find?applicant_id=${encodeURIComponent(appId)}`;
+        const {
+          ok,
+          json
+        } = await safeFetch(url, {
+          method: "GET"
+        });
+        if (ok && json && json.ok && json.item) {
+          const it = json.item;
+          affidavit.id = it.id || null;
+          let serverHas = it.has_conditions || "no";
+          if ((!serverHas || serverHas === "") && it.details) {
+            try {
+              const det = typeof it.details === "string" ? JSON.parse(it.details) : it.details;
+              if (det?.has_conditions) serverHas = det.has_conditions;
+            } catch (e) {}
+          }
+          affidavit.has_conditions = (serverHas + "").toLowerCase() === "yes" ? "yes" : "no";
+          affidavit.status = it.status || null;
+          affidavit.medical_clearance_file = it.medical_clearance_file || null;
+          // IMPORTANT: Map the clearance status from DB
+          affidavit.medical_clearance_status = it.medical_clearance_status || "pending";
+          affidavit.clearance_template_url = it.clearance_template_url || null;
+          affidavit.details = typeof it.details === "string" ? JSON.parse(it.details || "{}") : it.details;
         }
-      });
-      if (missingFields.length > 0) {
-        showModal("error", "Missing Information", `Please fill in all required fields. You have missed ${missingFields.length} field(s).`, "OK");
-        return; // Stop download
+      } catch (e) {
+        console.error(e);
       }
+    };
 
-      // If validation passes, proceed to download
-      generateAndDownload();
+    // ---------- Data Cleaning & Logic ----------
+    const getCleanData = () => {
+      const clean = {};
+      const groups = {};
+      fields.value.forEach(f => {
+        if (!groups[f.acroName]) groups[f.acroName] = [];
+        groups[f.acroName].push(f);
+      });
+      for (const [acroName, widgets] of Object.entries(groups)) {
+        const radioMatch = widgets.find(w => w.type === "radio" && formData[w.overlayKey] === w.value);
+        if (radioMatch) {
+          clean[acroName] = radioMatch.value;
+          continue;
+        }
+        const checkMatch = widgets.find(w => w.type === "checkbox" && formData[w.overlayKey] === true);
+        if (checkMatch) {
+          clean[acroName] = "Yes";
+          continue;
+        }
+        const textMatch = widgets.find(w => (w.type === "text" || w.type === "textarea") && formData[w.overlayKey]);
+        if (textMatch) {
+          clean[acroName] = formData[textMatch.overlayKey];
+        }
+      }
+      return clean;
     };
-    const changePage = async offset => {
-      const newPage = currentPage.value + offset;
-      if (newPage >= 1 && newPage <= totalPages.value) {
-        currentPage.value = newPage;
-        await (0,vue__WEBPACK_IMPORTED_MODULE_0__.nextTick)();
-        renderActivePage();
+    const computeHasConditions = () => {
+      const data = getCleanData();
+      for (const [key, val] of Object.entries(data)) {
+        if (!val) continue;
+        const lowerVal = String(val).toLowerCase();
+        if (lowerVal === "yes" || lowerVal === "true") {
+          return true;
+        }
+      }
+      return false;
+    };
+    const applyServerPrefill = () => {
+      if (!affidavit.details) return;
+      let fullDetails = affidavit.details;
+      if (typeof fullDetails === "string") {
+        try {
+          fullDetails = JSON.parse(fullDetails);
+        } catch (e) {
+          fullDetails = {};
+        }
+      }
+      let targetData = {};
+      if (currentTemplate.value === "clearance") {
+        targetData = fullDetails.medical_clearance_data || {};
+      } else {
+        targetData = fullDetails.medical_history || fullDetails;
+      }
+      suppressAutoHas.value = true;
+      const acroMap = {};
+      fields.value.forEach(f => {
+        if (!acroMap[f.acroName]) acroMap[f.acroName] = [];
+        acroMap[f.acroName].push(f);
+      });
+      for (const [key, val] of Object.entries(targetData)) {
+        if (key === "medical_history" || key === "medical_clearance_data") continue;
+        const widgets = acroMap[key];
+        if (!widgets) continue;
+        widgets.forEach(w => {
+          if (w.type === "radio") {
+            if (val === w.value) formData[w.overlayKey] = w.value;
+          } else if (w.type === "checkbox") {
+            formData[w.overlayKey] = val === "Yes" || val === true;
+          } else {
+            formData[w.overlayKey] = val;
+          }
+        });
+      }
+      (0,vue__WEBPACK_IMPORTED_MODULE_0__.nextTick)(() => suppressAutoHas.value = false);
+    };
+    const isFieldInvalid = overlayKey => {
+      if (!showErrors.value) return false;
+      const field = fields.value.find(f => f.overlayKey === overlayKey);
+      if (!field) return false;
+      if (field.type === "checkbox") return false;
+      const val = formData[overlayKey];
+      if (field.type === "radio") {
+        const siblings = fields.value.filter(f => f.acroName === field.acroName);
+        const hasSelection = siblings.some(s => formData[s.overlayKey] === s.value || formData[s.overlayKey] === true);
+        return !hasSelection;
+      }
+      return val === undefined || val === null || typeof val === "string" && val.trim() === "";
+    };
+    const handleRadioClick = field => {
+      fields.value.filter(f => f.acroName === field.acroName).forEach(f => {
+        formData[f.overlayKey] = false;
+      });
+      formData[field.overlayKey] = field.value;
+    };
+
+    // ---------- Actions ----------
+    const saveAffidavit = async () => {
+      saving.value = true;
+      try {
+        const appId = getApplicantId();
+        const cleanData = getCleanData();
+        const payload = {
+          applicant_id: appId,
+          has_conditions: computeHasConditions() ? "yes" : "no",
+          details: {
+            medical_history: cleanData
+          }
+        };
+        const url = `${apiBase}medical/affidavit`;
+        const {
+          ok,
+          json,
+          status
+        } = await safeFetch(url, {
+          method: "POST",
+          body: JSON.stringify(payload),
+          headers: {
+            "Content-Type": "application/json",
+            ...(typeof JRJ_ADMIN !== "undefined" ? {
+              "X-WP-Nonce": JRJ_ADMIN.nonce
+            } : {})
+          }
+        });
+        if (ok && json?.ok) {
+          affidavit.id = json.id;
+          affidavit.has_conditions = payload.has_conditions;
+          affidavit.status = "submitted";
+          if (!affidavit.details) affidavit.details = {};
+          affidavit.details.medical_history = cleanData;
+          showErrors.value = false;
+          showModal("success", "Saved", "Medical History saved.");
+          if (affidavit.has_conditions === "yes" && currentTemplate.value === "history") {
+            const tUrl = affidavit.clearance_template_url || props.clearancePdfUrl || props.pdfUrl;
+            if (tUrl) {
+              currentTemplate.value = "clearance";
+              await loadPdfFromUrl(tUrl);
+            }
+          }
+        } else {
+          throw new Error(json?.message || `Save failed (Status: ${status})`);
+        }
+      } catch (e) {
+        showModal("error", "Save Error", e.message);
+      } finally {
+        saving.value = false;
       }
     };
-    const renderActivePage = async () => {
-      if (!pagesData.length) return;
-      const pageData = pagesData[currentPage.value - 1];
-      const canvas = canvasRef.value;
-      if (canvas && pageData) {
-        const ctx = canvas.getContext("2d");
-        activePageStyle.width = `${pageData.width}px`;
-        activePageStyle.height = `${pageData.height}px`;
-        canvas.width = pageData.width;
-        canvas.height = pageData.height;
-        await pageData.pageObj.render({
-          canvasContext: ctx,
-          viewport: pageData.viewport
-        }).promise;
+    const saveMedicalClearance = async () => {
+      saving.value = true;
+      try {
+        const appId = getApplicantId();
+        const cleanData = getCleanData();
+        const payload = {
+          applicant_id: appId,
+          details: {
+            medical_clearance_data: cleanData
+          }
+        };
+        const url = `${apiBase}medical/clearance`;
+        const {
+          ok,
+          json,
+          status
+        } = await safeFetch(url, {
+          method: "POST",
+          body: JSON.stringify(payload),
+          headers: {
+            "Content-Type": "application/json",
+            ...(typeof JRJ_ADMIN !== "undefined" ? {
+              "X-WP-Nonce": JRJ_ADMIN.nonce
+            } : {})
+          }
+        });
+        if (ok && json?.ok) {
+          if (!affidavit.details) affidavit.details = {};
+          affidavit.details.medical_clearance_data = cleanData;
+          showModal("success", "Saved", "Medical Clearance Data saved.");
+        } else {
+          throw new Error(json?.message || `Save failed (Status: ${status})`);
+        }
+      } catch (e) {
+        showModal("error", "Save Error", e.message);
+      } finally {
+        saving.value = false;
       }
     };
+    const uploadCompletedClearance = async () => {
+      if (!affidavit.id) return showModal("error", "Error", "Please Save the form first.");
+      const fileInput = uploadInputRef.value;
+      if (!fileInput || !fileInput.files[0]) return showModal("error", "Error", "Please select a PDF file.");
+      const file = fileInput.files[0];
+      if (file.type !== "application/pdf") return showModal("error", "Error", "Only PDF files are allowed.");
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        const url = `${apiBase}medical/affidavit/${affidavit.id}/upload`;
+        const headers = defaultHeaders();
+        delete headers["Content-Type"];
+        const res = await fetch(url, {
+          method: "POST",
+          body: fd,
+          headers: headers
+        });
+        const j = await res.json();
+        if (res.ok && j.ok) {
+          affidavit.medical_clearance_file = j.medical_clearance_file;
+          // UPDATE STATUS TO SUBMITTED TO HIDE FORM
+          affidavit.medical_clearance_status = "submitted";
+          showModal("success", "Uploaded", "File uploaded successfully.");
+        } else {
+          throw new Error(j.message || "Upload failed");
+        }
+      } catch (e) {
+        showModal("error", "Upload Error", e.message);
+      }
+    };
+
+    // ---------- PDF & Mounting ----------
+    (0,vue__WEBPACK_IMPORTED_MODULE_0__.onMounted)(async () => {
+      await fetchAffidavitForApplicant();
+      // If already submitted, we don't need to load PDF, but we can do it anyway if needed.
+      if (affidavit.medical_clearance_status !== "submitted") {
+        const initialUrl = affidavit.has_conditions === "yes" ? affidavit.clearance_template_url || props.clearancePdfUrl : props.pdfUrl;
+        currentTemplate.value = affidavit.has_conditions === "yes" ? "clearance" : "history";
+        await loadPdfFromUrl(initialUrl);
+      }
+    });
     const loadPdfFromUrl = async url => {
+      status.value = "loading";
+      fields.value = [];
+      pagesData = [];
       try {
-        status.value = "loading";
-        const response = await fetch(url);
-        const blob = await response.blob();
-        await processPdfFile(blob);
-      } catch (err) {
-        console.error(err);
-        status.value = "error";
-      }
-    };
-    const processPdfFile = async fileOrBlob => {
-      try {
-        status.value = "loading";
-        fields.value = [];
-        pagesData = [];
-        currentPage.value = 1;
-        const buffer = await fileOrBlob.arrayBuffer();
-        rawPdfBytes = buffer;
-        const pdfJsBuffer = buffer.slice(0);
-        const loadingTask = pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.getDocument(pdfJsBuffer);
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const buffer = await blob.arrayBuffer();
+        rawPdfBytes = new Uint8Array(buffer);
+        const loadingTask = pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.getDocument({
+          data: rawPdfBytes.slice()
+        });
         const pdfDoc = await loadingTask.promise;
         totalPages.value = pdfDoc.numPages;
         for (let i = 1; i <= totalPages.value; i++) {
@@ -98917,286 +99145,330 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
             height: viewport.height
           });
           const annotations = await page.getAnnotations();
-          mapAnnotationsToFields(annotations, i - 1, viewport);
+          const widgets = annotations.filter(a => a.subtype === "Widget" && a.rect && a.fieldName);
+          let idx = 0;
+          widgets.forEach(anno => {
+            idx++;
+            const overlayKey = `${anno.fieldName}__p${i - 1}__i${idx}`;
+            const vRectArr = viewport.convertToViewportRectangle(anno.rect);
+            const viewRect = {
+              x: Math.min(vRectArr[0], vRectArr[2]),
+              y: Math.min(vRectArr[1], vRectArr[3]),
+              w: Math.abs(vRectArr[0] - vRectArr[2]),
+              h: Math.abs(vRectArr[1] - vRectArr[3])
+            };
+            const pdfRect = {
+              x: anno.rect[0],
+              y: anno.rect[1],
+              w: anno.rect[2] - anno.rect[0],
+              h: anno.rect[3] - anno.rect[1]
+            };
+            let type = "text";
+            if (anno.checkBox || anno.fieldType === "Btn" && !anno.radioButton && !anno.buttonValue) type = "checkbox";else if (anno.radioButton || anno.fieldType === "Btn" && anno.buttonValue) type = "radio";else if (viewRect.h > 25) type = "textarea";
+            if (formData[overlayKey] === undefined) formData[overlayKey] = type === "checkbox" ? false : "";
+            fields.value.push({
+              id: `f-${Math.random().toString(36).substr(2, 9)}`,
+              acroName: anno.fieldName,
+              overlayKey,
+              type,
+              pageIndex: i - 1,
+              viewRect,
+              pdfRect,
+              value: anno.buttonValue
+            });
+          });
         }
+        applyServerPrefill();
         status.value = "success";
-        await (0,vue__WEBPACK_IMPORTED_MODULE_0__.nextTick)();
-        renderActivePage();
-      } catch (err) {
-        console.error(err);
+        (0,vue__WEBPACK_IMPORTED_MODULE_0__.nextTick)(() => renderActivePage());
+      } catch (e) {
         status.value = "error";
+        console.error(e);
       }
     };
-    const mapAnnotationsToFields = (annotations, pageIndex, viewport) => {
-      const widgets = annotations.filter(a => a.subtype === "Widget");
-      widgets.forEach(anno => {
+    const renderActivePage = async () => {
+      if (!pagesData[currentPage.value - 1]) return;
+      const pd = pagesData[currentPage.value - 1];
+      const cvs = canvasRef.value;
+      if (cvs) {
+        const ctx = cvs.getContext("2d");
+        activePageStyle.width = `${pd.width}px`;
+        activePageStyle.height = `${pd.height}px`;
+        cvs.width = pd.width;
+        cvs.height = pd.height;
+        await pd.pageObj.render({
+          canvasContext: ctx,
+          viewport: pd.viewport
+        }).promise;
+      }
+    };
+    const generatePdfBytes = async () => {
+      if (!rawPdfBytes) throw new Error("No PDF loaded");
+      const pdfDoc = await pdf_lib__WEBPACK_IMPORTED_MODULE_2__.PDFDocument.load(rawPdfBytes.slice());
+      const helvetica = await pdfDoc.embedFont(pdf_lib__WEBPACK_IMPORTED_MODULE_2__.StandardFonts.Helvetica);
+      const pages = pdfDoc.getPages();
+      for (const field of fields.value) {
+        const val = formData[field.overlayKey];
+        if (val === undefined || val === null || val === "") continue;
+        if (val === false && field.type !== "checkbox") continue;
+        const page = pages[field.pageIndex];
         const {
-          fieldName,
-          fieldType,
-          rect,
-          buttonValue,
-          checkBox,
-          radioButton
-        } = anno;
-        if (!rect || !fieldName) return;
-        const pdfRect = {
-          x: rect[0],
-          y: rect[1],
-          w: rect[2] - rect[0],
-          h: rect[3] - rect[1]
-        };
-
-        // Viewport calc for HTML overlay
-        const viewRect = viewport.convertToViewportRectangle(rect);
-        const x = Math.min(viewRect[0], viewRect[2]);
-        const y = Math.min(viewRect[1], viewRect[3]);
-        const w = Math.abs(viewRect[0] - viewRect[2]);
-        const h = Math.abs(viewRect[1] - viewRect[3]);
-        let type = "text";
-        if (checkBox || fieldType === "Btn" && !radioButton && !buttonValue) type = "checkbox";else if (radioButton || fieldType === "Btn" && buttonValue) type = "radio";else type = h > 25 ? "textarea" : "text";
-
-        // Init Data if missing
-        if (formData[fieldName] === undefined) {
-          if (type === "checkbox") formData[fieldName] = false;else formData[fieldName] = "";
-        }
-        fields.value.push({
-          id: `f-${Math.random().toString(36).substr(2, 9)}`,
-          name: fieldName,
-          type,
-          pageIndex,
           x,
           y,
           w,
-          h,
-          pdfRect,
-          value: buttonValue
-        });
-      });
-    };
-
-    // --- GENERATE PDF (DRAWING METHOD) ---
-    const generateAndDownload = async () => {
-      if (!rawPdfBytes) return;
-      try {
-        const pdfDoc = await pdf_lib__WEBPACK_IMPORTED_MODULE_2__.PDFDocument.load(rawPdfBytes.slice(0));
-        const helvetica = await pdfDoc.embedFont("Helvetica");
-        const form = pdfDoc.getForm();
-        for (const field of fields.value) {
-          const val = formData[field.name];
-          const page = pdfDoc.getPages()[field.pageIndex];
-          const {
-            x,
-            y,
-            w,
-            h
-          } = field.pdfRect;
-          if (!val) continue;
-
-          // Text
-          if (field.type === "text" || field.type === "textarea") {
-            try {
-              const textField = form.getTextField(field.name);
-              textField.setText(val);
-            } catch (e) {
-              page.drawText(val, {
-                x: x + 2,
-                y: y + 2,
-                size: 10,
-                font: helvetica
-              });
-            }
-          }
-          // Check/Radio Drawing
-          else if (field.type === "radio" || field.type === "checkbox") {
-            const isMatch = val === field.value || val === true;
-            if (isMatch) {
-              const x1 = x + w * 0.2;
-              const y1 = y + h * 0.5;
-              const x2 = x + w * 0.45;
-              const y2 = y + h * 0.2;
-              const x3 = x + w * 0.8;
-              const y3 = y + h * 0.8;
-
-              // left
-              page.drawLine({
-                start: {
-                  x: x1,
-                  y: y1
-                },
-                end: {
-                  x: x2,
-                  y: y2
-                },
-                thickness: 1.5,
-                color: (0,pdf_lib__WEBPACK_IMPORTED_MODULE_2__.rgb)(0, 0, 0)
-              });
-
-              // right
-              page.drawLine({
-                start: {
-                  x: x2,
-                  y: y2
-                },
-                end: {
-                  x: x3,
-                  y: y3
-                },
-                thickness: 1.5,
-                color: (0,pdf_lib__WEBPACK_IMPORTED_MODULE_2__.rgb)(0, 0, 0)
-              });
-            }
+          h
+        } = field.pdfRect;
+        if (field.type === "text" || field.type === "textarea") {
+          page.drawText(String(val), {
+            x: x + 2,
+            y: y + 2,
+            size: 10,
+            font: helvetica,
+            maxWidth: w - 4
+          });
+        } else if (field.type === "checkbox" || field.type === "radio") {
+          const isChecked = val === true || val === field.value;
+          if (isChecked) {
+            const x1 = x + w * 0.2;
+            const y1 = y + h * 0.5;
+            const x2 = x + w * 0.4;
+            const y2 = y + h * 0.2;
+            const x3 = x + w * 0.8;
+            const y3 = y + h * 0.8;
+            page.drawLine({
+              start: {
+                x: x1,
+                y: y1
+              },
+              end: {
+                x: x2,
+                y: y2
+              },
+              thickness: 1.5,
+              color: (0,pdf_lib__WEBPACK_IMPORTED_MODULE_2__.rgb)(0, 0, 0)
+            });
+            page.drawLine({
+              start: {
+                x: x2,
+                y: y2
+              },
+              end: {
+                x: x3,
+                y: y3
+              },
+              thickness: 1.5,
+              color: (0,pdf_lib__WEBPACK_IMPORTED_MODULE_2__.rgb)(0, 0, 0)
+            });
           }
         }
-        try {
-          form.flatten();
-        } catch (e) {}
-        const pdfBytes = await pdfDoc.save();
-        const blob = new Blob([pdfBytes], {
+      }
+      return await pdfDoc.save();
+    };
+    const validateAndDownload = async () => {
+      try {
+        const bytes = await generatePdfBytes();
+        const blob = new Blob([bytes], {
           type: "application/pdf"
         });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = `applicant_${props.applicantId}_filled.pdf`;
+        const suffix = currentTemplate.value === "clearance" ? "clearance" : "history";
+        link.download = `medical_${suffix}_${getApplicantId()}.pdf`;
         link.click();
-      } catch (err) {
-        console.error(err);
-        alert("Error: " + err.message);
+      } catch (e) {
+        showModal("error", "Export Error", e.message);
       }
     };
+    (0,vue__WEBPACK_IMPORTED_MODULE_0__.watch)([fields, formData], () => {
+      if (suppressAutoHas.value) return;
+      if (computeHasConditions()) affidavit.has_conditions = "yes";
+    }, {
+      deep: true
+    });
+    (0,vue__WEBPACK_IMPORTED_MODULE_0__.watch)(currentPage, () => {
+      (0,vue__WEBPACK_IMPORTED_MODULE_0__.nextTick)(() => renderActivePage());
+    });
     return {
       canvasRef,
       status,
       currentPage,
       totalPages,
-      changePage,
       activePageStyle,
       fields,
       formData,
+      affidavit,
+      saving,
+      showErrors,
+      changePage: off => {
+        const n = currentPage.value + off;
+        if (n >= 1 && n <= totalPages.value) currentPage.value = n;
+      },
+      saveAffidavit,
+      saveMedicalClearance,
       validateAndDownload,
-      // Used in template
-      requestClearForm,
+      uploadCompletedClearance,
+      uploadInputRef,
       modal,
+      showModal,
       closeModal,
-      handleModalConfirm
+      handleModalConfirm,
+      isFieldInvalid,
+      handleRadioClick,
+      pdfLoaded: (0,vue__WEBPACK_IMPORTED_MODULE_0__.computed)(() => status.value === "success"),
+      canSave: (0,vue__WEBPACK_IMPORTED_MODULE_0__.computed)(() => status.value === "success" && !saving.value),
+      showUpload: (0,vue__WEBPACK_IMPORTED_MODULE_0__.computed)(() => affidavit.has_conditions === "yes"),
+      currentTemplate
     };
   },
   template: `
-  <div class="medical-affidavit-panel flex flex-col h-full font-sans text-slate-800 bg-white relative">
+  <div class="medical-affidavit-panel">
     
-    <div v-if="modal.show" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm transition-opacity">
-        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all scale-100">
-            
-            <div class="px-6 py-4 border-b border-gray-100 flex items-center gap-3" 
-                 :class="modal.type === 'confirm' ? 'bg-red-50' : 'bg-blue-50'">
-                <div class="w-10 h-10 rounded-full flex items-center justify-center"
-                     :class="modal.type === 'confirm' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'">
-                    <i class="fa-solid" :class="modal.type === 'confirm' ? 'fa-triangle-exclamation' : 'fa-circle-info'"></i>
-                </div>
-                <h3 class="text-lg font-bold" :class="modal.type === 'confirm' ? 'text-red-700' : 'text-blue-700'">
-                    {{ modal.title }}
-                </h3>
-            </div>
-
-            <div class="p-6 text-gray-600 text-sm leading-relaxed">
-                {{ modal.message }}
-            </div>
-
-            <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-                <button @click="closeModal" 
-                        class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-100 transition">
-                    Cancel
-                </button>
-                
-                <button v-if="modal.type === 'confirm'" 
-                        @click="handleModalConfirm"
-                        class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition shadow-sm">
-                    {{ modal.confirmText }}
-                </button>
-                <button v-else 
-                        @click="closeModal"
-                        class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition shadow-sm">
-                    OK
-                </button>
-            </div>
+    <div v-if="affidavit.medical_clearance_status === 'submitted'" class="bg-emerald-50 border border-emerald-200 rounded-lg p-8 text-center max-w-2xl mx-auto mt-10 shadow-sm">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mb-4">
+             <svg class="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+             </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-800 mb-2">Medical Clearance Submitted</h2>
+        <p class="text-slate-600 mb-6">Your medical clearance file has been successfully uploaded. Our team is currently reviewing it.</p>
+        <div class="bg-white p-4 rounded border border-emerald-100 inline-block text-left text-sm text-slate-500">
+             <p class="flex items-center">
+                <svg class="w-4 h-4 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                </svg>
+                We will notify you via email once the review is complete.
+             </p>
         </div>
     </div>
 
-    <header class="sticky top-0 z-50 bg-white border-b border-gray-200 flex justify-between items-center">
-      <div>
-        <div class="flex flex-col">
-             <h2 class="text-2xl font-bold text-gray-800">Medical History Affidavit</h2>
-             <p class="text-gray-500 text-sm mt-1">Fill out and download your medical history form.</p>
+    <div v-else>
+        <header class="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-4 rounded shadow-sm border">
+        <div>
+            <h2 class="text-xl font-bold text-slate-800">Medical History Affidavit</h2>
+            <p class="text-sm text-slate-500">Please complete the form below accurately.</p>
         </div>
-      </div>
-      
-      <div class="flex items-center gap-3">
-        <div v-if="status === 'loading'" class="mr-4 text-sm text-blue-600 flex items-center gap-2">
-          <i class="fa-solid fa-spinner fa-spin"></i> Loading...
+        <div class="flex items-center gap-2">
+            <button @click="changePage(-1)" :disabled="currentPage<=1" class="px-3 py-1.5 border rounded hover:bg-slate-50 disabled:opacity-50 text-sm">Prev</button>
+            <span class="text-sm font-medium text-slate-600 px-2">Page {{ currentPage }} / {{ totalPages }}</span>
+            <button @click="changePage(1)" :disabled="currentPage>=totalPages" class="px-3 py-1.5 border rounded hover:bg-slate-50 disabled:opacity-50 text-sm">Next</button>
+            
+            <div class="h-6 w-px bg-slate-300 mx-2"></div>
+
+            <button v-if="currentTemplate === 'history'" @click="saveAffidavit" :disabled="!canSave" class="px-4 py-2 bg-slate-800 text-white rounded text-sm hover:bg-slate-900 disabled:opacity-50 flex items-center">
+                <svg v-if="saving" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                <span>Save Medical History</span>
+            </button>
+
+            <button v-if="currentTemplate === 'clearance'" @click="saveMedicalClearance" :disabled="!canSave" class="px-4 py-2 bg-emerald-700 text-white rounded text-sm hover:bg-emerald-800 disabled:opacity-50 flex items-center">
+                <svg v-if="saving" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                <span>Save Medical Clearance</span>
+            </button>
+
+            <button @click="validateAndDownload" :disabled="!pdfLoaded" class="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50">
+                Download PDF
+            </button>
+        </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-4">
+        <div class="lg:col-span-3">
+            <div class="relative bg-slate-200 overflow-auto rounded border min-h-[600px] flex justify-center p-4">
+                
+                <div v-if="status==='loading'" class="self-center text-slate-500 flex flex-col items-center">
+                    <svg class="animate-spin h-8 w-8 text-slate-500 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    <div>Loading PDF...</div>
+                </div>
+
+                <div v-if="status==='error'" class="self-center text-red-500">Failed to load PDF.</div>
+                
+                <div v-if="status==='success'" class="relative shadow-lg bg-white" :style="activePageStyle">
+                    <canvas ref="canvasRef" class="block"></canvas>
+                    
+                    <div class="absolute inset-0 pointer-events-none">
+                    <template v-for="f in fields" :key="f.id">
+                        <template v-if="f.pageIndex === (currentPage - 1)">
+                            
+                            <div v-if="f.type==='checkbox'" 
+                                class="absolute pointer-events-auto cursor-pointer hover:bg-blue-50/30 flex items-center justify-center"
+                                :style="{ left: f.viewRect.x + 'px', top: f.viewRect.y + 'px', width: f.viewRect.w + 'px', height: f.viewRect.h + 'px' }">
+                                <input type="checkbox" v-model="formData[f.overlayKey]" class="w-full h-full opacity-0 cursor-pointer" />
+                                <div v-if="formData[f.overlayKey]" class="text-black font-bold text-lg leading-none">✓</div>
+                            </div>
+
+                            <div v-else-if="f.type==='radio'"
+                                @click="handleRadioClick(f)"
+                                :class="{'ring-2 ring-red-500 bg-red-50/20': isFieldInvalid(f.overlayKey), 'bg-blue-100/30': formData[f.overlayKey] === f.value}"
+                                class="absolute pointer-events-auto cursor-pointer flex items-center justify-center hover:bg-blue-50/30 rounded-sm"
+                                :style="{ left: f.viewRect.x + 'px', top: f.viewRect.y + 'px', width: f.viewRect.w + 'px', height: f.viewRect.h + 'px' }">
+                                <div v-if="formData[f.overlayKey] === f.value" class="w-2.5 h-2.5 bg-black rounded-full"></div>
+                            </div>
+
+                            <textarea v-else-if="f.type==='textarea'"
+                                v-model="formData[f.overlayKey]"
+                                :class="{'ring-2 ring-red-500 bg-red-50/20': isFieldInvalid(f.overlayKey)}"
+                                class="absolute pointer-events-auto bg-transparent text-xs p-1 resize-none outline-none focus:bg-white/80"
+                                :style="{ left: f.viewRect.x + 'px', top: f.viewRect.y + 'px', width: f.viewRect.w + 'px', height: f.viewRect.h + 'px' }">
+                            </textarea>
+
+                            <input v-else type="text"
+                                v-model="formData[f.overlayKey]"
+                                :class="{'ring-2 ring-red-500 bg-red-50/20': isFieldInvalid(f.overlayKey)}"
+                                class="absolute pointer-events-auto bg-transparent text-xs p-1 outline-none focus:bg-white/80"
+                                :style="{ left: f.viewRect.x + 'px', top: f.viewRect.y + 'px', width: f.viewRect.w + 'px', height: f.viewRect.h + 'px' }" />
+
+                        </template>
+                    </template>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <div class="h-8 w-px bg-gray-200 mx-2"></div>
+        <div class="lg:col-span-1 space-y-4">
+            <div class="bg-white p-4 rounded border shadow-sm">
+                <h3 class="font-bold text-sm mb-2 text-slate-700">Form Status</h3>
+                <div class="text-xs text-slate-600 space-y-1">
+                    <div class="flex justify-between"><span>Template:</span> <strong class="capitalize">{{ currentTemplate }}</strong></div>
+                    <div class="flex justify-between"><span>Has Conditions:</span> <strong :class="affidavit.has_conditions==='yes'?'text-red-600':'text-green-600'">{{ affidavit.has_conditions.toUpperCase() }}</strong></div>
+                    <div class="flex justify-between"><span>Status:</span> <strong>{{ affidavit.status || 'Draft' }}</strong></div>
+                </div>
+                
+                <div v-if="showUpload" class="mt-4 pt-4 border-t border-slate-100">
+                    <div class="text-xs text-amber-600 bg-amber-50 p-2 rounded mb-2 border border-amber-200">
+                    <strong>Action Required:</strong> Since you have medical conditions, download the clearance form, sign it, and upload it here.
+                    </div>
+                    <input type="file" ref="uploadInputRef" accept="application/pdf" class="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-slate-100 hover:file:bg-slate-200 mb-2"/>
+                    <button @click="uploadCompletedClearance" class="w-full py-1.5 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700">Upload Signed Clearance</button>
+                </div>
+            </div>
+            
+            <div v-if="showErrors" class="bg-red-50 border border-red-200 p-3 rounded text-xs text-red-700">
+                <strong class="block mb-1">Missing Fields</strong>
+                Please fill in the fields highlighted in red.
+            </div>
+        </div>
+        </div>
+    </div>
 
-        <button @click="requestClearForm" 
-                  class="px-4 py-2 bg-white text-red-600 border border-red-200 hover:bg-red-50 rounded-lg text-sm font-medium transition shadow-sm">
-            Clear Form
-          </button>
-        
-        <button @click="validateAndDownload" 
-                :disabled="status !== 'success'" 
-                class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md">
-          Download Filled
-        </button>
-      </div>
-    </header>
-
-    <main class="flex-1 relative overflow-auto bg-gray-50 flex flex-col items-center w-full">
-      
-      <div class="py-8 px-4 w-full flex justify-center">
-        <div v-show="status === 'success'" class="relative shadow-xl bg-white transition-all" :style="activePageStyle">
-          
-          <canvas ref="canvasRef" class="block rounded-sm"></canvas>
-
-          <div class="absolute inset-0">
-            <template v-for="field in fields" :key="field.id">
-              <template v-if="field.pageIndex === (currentPage - 1)">
-                
-                <input v-if="field.type === 'checkbox'" type="checkbox" v-model="formData[field.name]" 
-                       class="absolute cursor-pointer accent-blue-600 bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500/20" 
-                       :style="{ left: field.x + 'px', top: field.y + 'px', width: field.w + 'px', height: field.h + 'px' }" />
-                
-                <input v-else-if="field.type === 'radio'" type="radio" 
-                       :name="field.name" :value="field.value" v-model="formData[field.name]" 
-                       class="absolute cursor-pointer accent-blue-600" 
-                       :style="{ left: field.x + 'px', top: field.y + 'px', width: field.w + 'px', height: field.h + 'px' }" />
-                
-                <textarea v-else-if="field.type === 'textarea'" v-model="formData[field.name]" 
-                          class="absolute bg-blue-600/10 border border-blue-600/20 text-xs p-1 resize-none focus:bg-white focus:border-blue-600 outline-none rounded-sm text-gray-800 font-medium" 
-                          :style="{ left: field.x + 'px', top: field.y + 'px', width: field.w + 'px', height: field.h + 'px' }"></textarea>
-                
-                <input v-else type="text" v-model="formData[field.name]" 
-                       class="absolute bg-blue-600/10 border-blue-600/20 text-xs p-1 focus:bg-white focus:border-blue-600 outline-none rounded-sm text-gray-800 font-medium" 
-                       :style="{ left: field.x + 'px', top: field.y + 'px', width: field.w + 'px', height: field.h + 'px' }" />
-              
-              </template>
-            </template>
+    <div v-if="modal.show" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+       <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="closeModal"></div>
+       <div class="relative bg-white rounded-lg shadow-xl p-6 max-w-sm w-full">
+          <h3 class="text-lg font-bold mb-2" :class="modal.type==='error'?'text-red-600':'text-slate-800'">{{ modal.title }}</h3>
+          <p class="text-sm text-slate-600 mb-6">{{ modal.message }}</p>
+          <div class="flex justify-end gap-2">
+             <button @click="closeModal" class="px-4 py-2 border rounded text-sm hover:bg-slate-50">Close</button>
+             <button v-if="modal.onConfirm" @click="handleModalConfirm" class="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">OK</button>
           </div>
-        </div>
-      </div>
-    </main>
-
-    <footer v-if="status === 'success'" class="sticky bottom-0 z-50 bg-white border-t border-gray-200 h-16 flex items-center justify-between px-8 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <button @click="changePage(-1)" :disabled="currentPage <= 1" class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-medium disabled:opacity-50 transition flex items-center shadow-sm">
-          <i class="fa-solid fa-chevron-left mr-2"></i> Previous
-        </button>
-        
-        <span class="font-medium text-gray-600 bg-gray-100 px-4 py-1.5 rounded-full text-xs border border-gray-200">
-          Page {{ currentPage }} of {{ totalPages }}
-        </span>
-        
-        <button @click="changePage(1)" :disabled="currentPage >= totalPages" class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-medium disabled:opacity-50 transition flex items-center shadow-sm">
-          Next <i class="fa-solid fa-chevron-right ml-2"></i>
-        </button>
-    </footer>
+       </div>
+    </div>
   </div>
   `
 });
@@ -99251,7 +99523,8 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_2__.GlobalWorkerOptions.workerSrc = new URL(
     let pagesData = [];
     const activePageStyle = (0,vue__WEBPACK_IMPORTED_MODULE_0__.reactive)({
       width: "0px",
-      height: "0px"
+      height: "0px",
+      position: "relative"
     });
     const fields = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)([]);
     const formData = (0,vue__WEBPACK_IMPORTED_MODULE_0__.reactive)({});
@@ -100027,206 +100300,285 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_2__.GlobalWorkerOptions.workerSrc = new URL(
     };
   },
   template: `
-  <div class="payment-extension-panel">
-    <!-- Submitted notice -->
-    <div v-if="item.payment_extension && item.payment_extension.status === 'submitted' && !showPanel" class="max-w-5xl mx-auto p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 mb-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="font-semibold">PDF submitted for review</div>
-          <div class="text-sm text-emerald-700 mt-1">Your signed agreement has been submitted and is pending review.</div>
+  <div class="payment-extension-panel font-sans text-slate-600">
+
+      <div v-if="item.payment_extension && item.payment_extension.status === 'submitted' && !showPanel" 
+         class="max-w-2xl mx-auto mt-8 bg-white rounded-2xl shadow-xl shadow-emerald-900/5 border border-slate-100 overflow-hidden">
+      
+      <div class="bg-emerald-50/50 p-8 text-center border-b border-emerald-50">
+        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white text-emerald-500 mb-6 shadow-sm ring-8 ring-emerald-50">
+          <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
         </div>
-        <div>
-          <button @click="handleResubmitClick" class="px-3 py-2 bg-white border rounded text-sm">Resubmit / Edit</button>
+        <h2 class="text-2xl font-bold text-slate-800 mb-2">Agreement Submitted</h2>
+        <p class="text-slate-500 max-w-md mx-auto">Your Payment Extension Agreement has been securely received.</p>
+      </div>
+
+      <div class="p-8">
+        <div class="flex gap-4 p-4 rounded-xl bg-blue-50/50 border border-blue-100 mb-8 items-start">
+           <div class="flex-shrink-0 mt-0.5 text-blue-500">
+             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+           </div>
+           <div class="text-sm text-slate-600">
+             <strong class="text-slate-800 block mb-1">What happens next?</strong>
+             Our finance team is currently reviewing your request. You will receive an email notification once the status changes.
+           </div>
+        </div>
+
+        <div class="flex justify-center">
+           <button @click="handleResubmitClick" class="group inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-slate-50 transition-all">
+              <svg class="w-4 h-4 text-slate-400 group-hover:text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+              View Document Details
+           </button>
         </div>
       </div>
     </div>
 
-    <!-- Main panel: hide when showPanel === false (submitted) -->
-    <div v-if="showPanel" class="bg-white rounded-2xl overflow-hidden">
-      <div class="flex items-center justify-between gap-6 px-6 py-5 border-b">
-        <div class="flex items-start gap-4">
-          <div class="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-[#E8A674] to-[#D9733A] text-white rounded-lg text-xl font-bold shadow-md">PE</div>
+    <div v-if="showPanel" class="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 ring-1 ring-slate-900/5">
+      
+      <div class="px-6 py-5 border-b border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6 bg-slate-50/50">
+        <div class="flex items-center gap-4 w-full md:w-auto">
+          <div class="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/20">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+          </div>
           <div>
-            <h1 class="text-2xl font-semibold text-slate-900">Payment Extension Agreement</h1>
-            <p class="text-sm text-slate-500 mt-0.5">Review the pre-filled details and sign to complete the agreement.</p>
+            <h1 class="text-xl font-bold text-slate-900">Payment Extension Agreement</h1>
+            <p class="text-sm text-slate-500">Review document details and sign below.</p>
           </div>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 w-full md:w-auto justify-end">
           
-          <div class="relative inline-flex items-center">
-            <button
-              @click="validateAndDownload"
-              :disabled="status !== 'success' || !isSigned"
-              :title="!isSigned ? 'Please sign the document before downloading' : 'Download signed PDF'"
-              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white shadow-md bg-gradient-to-r from-[#3b82f6] to-[#06b6d4] hover:from-[#2563eb] disabled:opacity-50 disabled:cursor-not-allowed">
-              <i class="fa-solid fa-download"></i> Download
-            </button>
-          </div>
+          <button
+            @click="validateAndDownload"
+            :disabled="status !== 'success' || !isSigned"
+            :class="[
+              'flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition-all focus:ring-2 focus:ring-offset-1 focus:ring-blue-500',
+              !isSigned || status !== 'success' 
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-blue-600'
+            ]"
+            :title="!isSigned ? 'Sign first' : 'Download PDF'">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            <span>Download</span>
+          </button>
 
-          <div class="relative inline-flex items-center">
-            <button @click="submitFilledPdf" :disabled="saving || !isSigned"
-                    :title="!isSigned ? 'Please sign before submitting' : (saving ? 'Submitting...' : 'Submit signed agreement')"
-                    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white shadow-md bg-gradient-to-r from-green-500 to-emerald-400 hover:from-green-600 disabled:opacity-50">
-              <i v-if="!saving" class="fa-solid fa-upload"></i>
-              <i v-else class="fa-solid fa-circle-notch fa-spin"></i>
-              <span>{{ saving ? 'Submitting...' : 'Submit' }}</span>
-            </button>
-          </div>
+          <button @click="submitFilledPdf" 
+                  :disabled="saving || !isSigned"
+                  :class="[
+                    'flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white shadow-md shadow-emerald-500/20 transition-all focus:ring-2 focus:ring-offset-1 focus:ring-emerald-500',
+                    saving || !isSigned
+                      ? 'bg-slate-300 cursor-not-allowed shadow-none'
+                      : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 transform hover:-translate-y-0.5'
+                  ]">
+            <svg v-if="saving" class="animate-spin -ml-1 mr-1 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            <span>{{ saving ? 'Submitting...' : 'Submit Agreement' }}</span>
+          </button>
         </div>
       </div>
 
-      <div class="pt-6 grid grid-cols-1 md:grid-cols-12 gap-6">
+      <div class="pt-6 pb-8 px-6 grid grid-cols-1 md:grid-cols-12 gap-8">
+        
         <section class="md:col-span-9">
-          <div class="rounded-lg border border-slate-100 bg-gradient-to-b from-white to-gray-50 p-4">
-            <div v-if="status === 'loading'" class="h-80 flex items-center justify-center">
-              <div class="text-slate-400 flex flex-col items-center gap-3"><i class="fa-solid fa-circle-notch fa-spin text-3xl"></i><div>Loading PDF…</div></div>
+          <div class="relative rounded-xl border border-slate-200 bg-slate-50 min-h-[500px] flex justify-center p-6 shadow-inner">
+            
+            <div v-if="status === 'loading'" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 bg-white/80 z-10 backdrop-blur-sm">
+              <svg class="animate-spin h-10 w-10 text-indigo-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+              <div class="text-sm font-medium">Generating Document...</div>
             </div>
 
-            <div v-if="status === 'success'" class="relative overflow-auto">
-              <div class="mx-auto" :style="activePageStyle">
-                <canvas ref="canvasRef" class="rounded-md block"></canvas>
+            <div v-if="status === 'error'" class="absolute inset-0 flex flex-col items-center justify-center text-red-500">
+               <svg class="w-12 h-12 mb-2 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+               <p>Unable to load PDF. Please refresh.</p>
+            </div>
+
+            <div v-if="status === 'success'" class="relative shadow-xl shadow-slate-200/50 transition-transform">
+              <div class="mx-auto bg-white" :style="activePageStyle">
+                <canvas ref="canvasRef" class="block"></canvas>
+                
                 <div class="absolute inset-0">
                   <template v-for="field in fields" :key="field.id">
                     <template v-if="field.pageIndex === (currentPage - 1)">
+                      
                       <div v-if="field.type==='signature'"
                            @click="openSignaturePad(field)"
                            :style="{ left: field.viewRect.x + 'px', top: field.viewRect.y + 'px', width: field.viewRect.w + 'px', height: field.viewRect.h + 'px' }"
-                           class="absolute flex items-center justify-center border-2 border-dashed rounded-lg bg-white/40 hover:bg-white/60 cursor-pointer transition">
-                        <template v-if="signatureDataUrl"><img :src="signatureDataUrl" class="max-w-full max-h-full object-contain rounded-md" /></template>
-                        <template v-else><div class="text-xs text-slate-700 font-semibold uppercase tracking-wide">Sign</div></template>
+                           class="group absolute flex items-center justify-center border-2 border-dashed rounded-lg cursor-pointer transition-all duration-200"
+                           :class="signatureDataUrl ? 'border-transparent bg-transparent' : 'border-indigo-400 bg-indigo-50/50 hover:bg-indigo-100/50 hover:border-indigo-500'">
+                        
+                        <template v-if="signatureDataUrl">
+                            <img :src="signatureDataUrl" class="max-w-full max-h-full object-contain" />
+                        </template>
+                        <template v-else>
+                            <div class="flex flex-col items-center animate-pulse group-hover:animate-none">
+                                <span class="text-[10px] uppercase font-bold text-indigo-600 tracking-wider">Click to Sign</span>
+                            </div>
+                        </template>
                       </div>
 
-                      <input v-else-if="field.type==='checkbox'" type="checkbox" :disabled="true" v-model="formData[field.name]"
+                      <input v-else-if="field.type==='checkbox'" type="checkbox" disabled v-model="formData[field.name]"
                              :style="{ left: field.viewRect.x + 'px', top: field.viewRect.y + 'px', width: field.viewRect.w + 'px', height: field.viewRect.h + 'px' }"
-                             class="absolute scale-110 opacity-80 cursor-not-allowed" />
+                             class="absolute scale-110 accent-indigo-600 cursor-default" />
 
-                      <input v-else-if="field.type==='radio'" type="radio" :name="field.name" :value="field.value" :disabled="true" v-model="formData[field.name]"
+                      <input v-else-if="field.type==='radio'" type="radio" :name="field.name" :value="field.value" disabled v-model="formData[field.name]"
                              :style="{ left: field.viewRect.x + 'px', top: field.viewRect.y + 'px', width: field.viewRect.w + 'px', height: field.viewRect.h + 'px' }"
-                             class="absolute opacity-80 cursor-not-allowed" />
+                             class="absolute accent-indigo-600 cursor-default" />
 
-                      <textarea v-else-if="field.type==='textarea'" :disabled="true" v-model="formData[field.name]"
+                      <textarea v-else-if="field.type==='textarea'" disabled v-model="formData[field.name]"
                                 :style="{ left: field.viewRect.x + 'px', top: field.viewRect.y + 'px', width: field.viewRect.w + 'px', height: field.viewRect.h + 'px' }"
-                                class="absolute !bg-transparent !border-none !shadow-none text-sm p-1 resize-none text-slate-900"></textarea>
+                                class="absolute bg-transparent border-none p-1 text-xs text-slate-800 resize-none font-medium"></textarea>
 
-                      <input v-else type="text" :disabled="true" v-model="formData[field.name]"
+                      <input v-else type="text" disabled v-model="formData[field.name]"
                              :style="{ left: field.viewRect.x + 'px', top: field.viewRect.y + 'px', width: field.viewRect.w + 'px', height: field.viewRect.h + 'px' }"
-                             class="absolute !bg-transparent !border-none !shadow-none text-sm p-1 text-slate-900" />
+                             class="absolute bg-transparent border-none p-1 text-xs text-slate-800 font-medium" />
                     </template>
                   </template>
                 </div>
               </div>
             </div>
-
-            <div v-if="status === 'error'" class="p-6 text-center text-sm text-red-600">Failed to load PDF. Check console for details.</div>
           </div>
         </section>
 
         <aside class="md:col-span-3">
-          <div class="sticky top-8 space-y-4">
-            <div class="bg-white rounded-lg border shadow-sm p-4">
-              <h3 class="text-sm font-semibold text-slate-700 mb-2">Tenant Details</h3>
-              <div class="text-sm text-slate-600 space-y-2">
-                <div><span class="font-medium text-slate-800">Tenant:</span> <span class="ml-2">{{ formData['tenant_first_name'] || formData['tenant_name'] }} {{ formData['tenant_last_name'] || '' }}</span></div>
-                <div><span class="font-medium text-slate-800">Address:</span> <span class="ml-2">{{ formData['rental_address'] || formData['Address'] || '' }}</span></div>
-                <div><span class="font-medium text-slate-800">Phone:</span> <span class="ml-2">{{ formData['phone'] || formData['tenant_phone'] || '' }}</span></div>
-                <div><span class="font-medium text-slate-800">Email:</span> <span class="ml-2">{{ formData['email'] || formData['tenant_email'] || '' }}</span></div>
-                <div><span class="font-medium text-slate-800">Signed Date:</span> <span class="ml-2">{{ formData['signed_date'] || formData['date'] || '' }}</span></div>
-              </div>
-            </div>
-
-            <div class="bg-white rounded-lg border shadow-sm p-4">
-              <h3 class="text-sm font-semibold text-slate-700 mb-2">Signature</h3>
-              <p class="text-xs text-slate-500 mb-3">Only the candidate may sign. Click the area on the document to open the signature pad.</p>
-
-              <div class="flex items-center gap-3">
-                <div class="w-16 h-10 bg-gray-50 rounded border flex items-center justify-center overflow-hidden">
-                  <template v-if="signatureDataUrl"><img :src="signatureDataUrl" class="object-cover w-full h-full" /></template>
-                  <template v-else><i class="fa-regular fa-pen-to-square text-slate-400"></i></template>
-                </div>
-                <div class="flex-1">
-                  <button @click="showSigModal = true" class="w-full px-3 py-2 bg-white border rounded text-sm hover:shadow">Open Signature Pad</button>
-                  
-                </div>
-              </div>
-            </div>
-            <span v-if="!isSigned" class="text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded">Signature required</span>
+          <div class="sticky top-6 space-y-6">
             
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">Agreement Details</h3>
+              <div class="space-y-4">
+                <div class="group">
+                    <label class="block text-xs text-slate-500 mb-1">Tenant Name</label>
+                    <div class="text-sm font-semibold text-slate-800 truncate">{{ formData['tenant_first_name'] || formData['tenant_name'] }} {{ formData['tenant_last_name'] }}</div>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Property Address</label>
+                    <div class="text-sm font-medium text-slate-800 leading-snug">{{ formData['rental_address'] || formData['Address'] || 'N/A' }}</div>
+                </div>
+                 <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">Phone</label>
+                        <div class="text-xs font-medium text-slate-800 truncate">{{ formData['phone'] || formData['tenant_phone'] || '-' }}</div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">Date</label>
+                        <div class="text-xs font-medium text-slate-800">{{ formData['signed_date'] || formData['date'] || '-' }}</div>
+                    </div>
+                 </div>
+              </div>
+            </div>
 
-            <div class="bg-white rounded-lg border shadow-sm p-4">
-              <h3 class="text-sm font-semibold text-slate-700 mb-2">Help</h3>
-              <p class="text-xs text-slate-500">Click the signature box on the PDF preview, draw or type your signature, then Download or Submit.</p>
+            <div class="bg-white rounded-xl border shadow-sm p-5 transition-colors" 
+                 :class="isSigned ? 'border-emerald-200 bg-emerald-50/30' : 'border-amber-200 bg-amber-50/30'">
+              <div class="flex justify-between items-start mb-2">
+                 <h3 class="text-sm font-bold text-slate-800">Signature Status</h3>
+                 <span v-if="!isSigned" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 uppercase tracking-wide">Required</span>
+                 <span v-else class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 uppercase tracking-wide">Signed</span>
+              </div>
+              
+              <div class="mt-3 mb-4">
+                 <div class="h-16 w-full bg-white rounded-lg border border-slate-200 border-dashed flex items-center justify-center overflow-hidden">
+                    <img v-if="signatureDataUrl" :src="signatureDataUrl" class="h-full object-contain p-2" />
+                    <span v-else class="text-xs text-slate-400 italic">Waiting for signature...</span>
+                 </div>
+              </div>
+
+              <button @click="showSigModal = true" 
+                      class="w-full py-2 px-4 rounded-lg text-sm font-medium border bg-white hover:bg-slate-50 transition-colors shadow-sm flex items-center justify-center gap-2"
+                      :class="isSigned ? 'text-slate-600 border-slate-200' : 'text-indigo-600 border-indigo-200 ring-2 ring-indigo-50'">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                  {{ isSigned ? 'Change Signature' : 'Sign Document' }}
+              </button>
+            </div>
+
+            <div class="flex gap-3 p-3 bg-blue-50 rounded-lg text-blue-700 text-xs">
+               <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+               <p>Click the dashed box on the document or the button above to sign. You can draw or type your signature.</p>
             </div>
           </div>
         </aside>
       </div>
     </div>
 
-    <!-- signature modal -->
     <div v-if="showSigModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40"></div>
-      <div class="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
-        <div class="flex items-center justify-between px-6 py-4 pb-0 border-b">
-          <h3 class="text-lg font-semibold">Sign Document</h3>
-          <button @click="showSigModal=false" class="text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+      <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" @click="showSigModal=false"></div>
+      
+      <div class="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden transform transition-all scale-100">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+          <h3 class="text-lg font-bold text-slate-800">Add Signature</h3>
+          <button @click="showSigModal=false" class="text-slate-400 hover:text-slate-600 transition-colors">
+             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
         </div>
 
-        <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div class="md:col-span-2">
-            <div class="bg-gray-50 rounded-lg border p-4">
-              <div class="mb-3 flex gap-2">
-                <button @click="signatureMode='draw'" :class="signatureMode==='draw' ? 'bg-white shadow-sm' : 'text-slate-500'" class="px-3 py-2 rounded">Draw</button>
-                <button @click="signatureMode='type'" :class="signatureMode==='type' ? 'bg-white shadow-sm' : 'text-slate-500'" class="px-3 py-2 rounded">Type</button>
-              </div>
+        <div class="p-6">
+          <div class="flex p-1 bg-slate-100 rounded-lg mb-6">
+            <button @click="signatureMode='draw'" 
+                    :class="signatureMode==='draw' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                    class="flex-1 py-2 text-sm font-semibold rounded-md transition-all">Draw</button>
+            <button @click="signatureMode='type'" 
+                    :class="signatureMode==='type' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                    class="flex-1 py-2 text-sm font-semibold rounded-md transition-all">Type</button>
+          </div>
 
-              <div v-show="signatureMode==='draw'">
-                <div class="bg-white border rounded-lg p-3">
-                  <VueSignaturePad ref="sigPadRef" width="100%" height="180px" :options="sigOptions" />
-                </div>
-                <div class="flex justify-between mt-3">
-                  <button @click="clearSignature" class="text-sm text-red-600">Clear</button>
-                  <div class="text-sm text-slate-400">Draw your signature above (auto-capture enabled)</div>
-                </div>
-              </div>
-
-              <div v-show="signatureMode==='type'">
-                <input v-model="typedSignature" type="text" class="w-full border rounded px-3 py-2" placeholder="Type your name" />
-                <div class="mt-3 p-6 border rounded text-center bg-white">
-                  <div style="font-family: 'Pacifico', cursive; font-size: 34px;">{{ typedSignature || 'Signature' }}</div>
-                </div>
-              </div>
+          <div v-show="signatureMode==='draw'">
+            <div class="relative border-2 border-slate-200 rounded-xl overflow-hidden bg-white hover:border-indigo-300 transition-colors">
+               <VueSignaturePad ref="sigPadRef" width="100%" height="200px" :options="sigOptions" class="cursor-crosshair" />
+               <div class="absolute bottom-2 right-2 text-[10px] text-slate-300 pointer-events-none">Sign Here</div>
+            </div>
+            <div class="flex justify-between mt-2">
+               <button @click="clearSignature" class="text-xs text-red-500 hover:text-red-700 font-medium flex items-center gap-1">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                  Clear
+               </button>
+               <span class="text-xs text-slate-400">Use your mouse or finger</span>
             </div>
           </div>
 
-          <aside class="md:col-span-1 flex flex-col gap-3">
-            <div class="bg-white border rounded-lg p-3 text-sm text-slate-600">
-              <div class="font-medium text-slate-800 mb-1">Preview</div>
-              <div class="w-full h-20 bg-gray-50 rounded flex items-center justify-center overflow-hidden">
-                <template v-if="signatureDataUrl"><img :src="signatureDataUrl" class="object-contain w-full h-full" /></template>
-                <template v-else><i class="fa-regular fa-pen-to-square text-slate-300"></i></template>
-              </div>
-            </div>
+          <div v-show="signatureMode==='type'">
+             <div class="space-y-4">
+                <div>
+                   <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Enter your full name</label>
+                   <input v-model="typedSignature" type="text" class="w-full border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-slate-800 placeholder:text-slate-300" placeholder="e.g. John Doe" />
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Preview</label>
+                    <div class="h-24 flex items-center justify-center border border-slate-200 rounded-lg bg-slate-50 text-indigo-600 overflow-hidden px-4">
+                       <div style="font-family: 'Pacifico', cursive; font-size: 32px; white-space: nowrap;">{{ typedSignature || 'Your Signature' }}</div>
+                    </div>
+                </div>
+             </div>
+          </div>
+        </div>
 
-            <div class="flex gap-2">
-              <button @click="showSigModal=false" class="flex-1 px-3 py-2 rounded border text-sm">Cancel</button>
-              <button @click="saveSignature" class="flex-1 px-3 py-2 rounded bg-gradient-to-r from-[#06b6d4] to-[#3b82f6] text-white">Apply</button>
-            </div>
-          </aside>
+        <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+          <button @click="showSigModal=false" class="px-5 py-2.5 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-white transition-colors">Cancel</button>
+          <button @click="saveSignature" class="px-6 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all">Apply Signature</button>
         </div>
       </div>
     </div>
 
-    <!-- generic modal -->
     <div v-if="modal.show" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40"></div>
-      <div class="relative max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
-        <div class="p-6">
-          <h3 class="text-lg font-semibold text-slate-900 mb-2">{{ modal.title }}</h3>
-          <p class="text-sm text-slate-600">{{ modal.message }}</p>
+      <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+      <div class="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center transform transition-all scale-100">
+        
+        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4"
+             :class="{
+               'bg-emerald-100': modal.type === 'success',
+               'bg-red-100': modal.type === 'error',
+               'bg-blue-100': modal.type === 'info'
+             }">
+            <svg v-if="modal.type === 'success'" class="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            <svg v-else-if="modal.type === 'error'" class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            <svg v-else class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         </div>
-        <div class="flex justify-end gap-3 p-4 border-t bg-slate-50">
-          <button @click="closeModal" class="px-4 py-2 rounded bg-white border text-sm">Cancel</button>
-          <button v-if="modal.onConfirm" @click="handleModalConfirm" class="px-4 py-2 rounded bg-indigo-600 text-white">OK</button>
+
+        <h3 class="text-lg font-bold text-slate-900 mb-2">{{ modal.title }}</h3>
+        <p class="text-sm text-slate-500 mb-6">{{ modal.message }}</p>
+        
+        <div class="flex gap-3 justify-center">
+          <button @click="closeModal" class="flex-1 px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-50">Close</button>
+          <button v-if="modal.onConfirm" @click="handleModalConfirm" class="flex-1 px-4 py-2 bg-indigo-600 rounded-lg text-white font-medium hover:bg-indigo-700">{{ modal.confirmText || 'Confirm' }}</button>
         </div>
       </div>
     </div>

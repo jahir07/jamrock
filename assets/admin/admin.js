@@ -37152,10 +37152,10 @@ function safeParseJson(v) {
 
     // safe accessor for extension enabled
     function isExtensionEnabled(item) {
-      const p = safeParseJson(item?.payment_extension) || item?.extension_enabled;
+      const p = item.extension_enabled;
       if (!p) return false;
       try {
-        return Number(p.extension_enabled || p.extension_enabled === 1 || p.extension_enabled === "1") ? true : false;
+        return Number(p === "1") ? true : false;
       } catch (e) {
         return false;
       }
@@ -37248,7 +37248,7 @@ function safeParseJson(v) {
           fields_json: fields_json_obj
         };
         const body = new URLSearchParams();
-        body.append("enable", 1);
+        body.append("agreement_enable", 1);
         body.append("extended_until", ext_meta.extended_until || "");
         body.append("note", ext_meta.notes || "");
         // send fields json as a string as well (backend should accept it)
@@ -37608,7 +37608,7 @@ function safeParseJson(v) {
           <button class="button" @click="extentionUpdate(modalItem.id, 'approved')" :disabled="extensionModalLoading">Approve</button>
           <button class="button" @click="extentionUpdate(modalItem.id, 'rejected')" :disabled="extensionModalLoading" style="margin-left:8px">Reject</button>
           <button class="button" @click="extentionUpdate(modalItem.id, 'in_progress')" :disabled="extensionModalLoading" style="margin-left:8px">Mark In Progress</button>
-          <button class="button" @click="saveExtensionForApplicant(modalItem.applicant_id)" :disabled="extensionModalLoading" style="margin-left:8px">Send to Candidate</button>
+          <button class="button" @click="saveExtensionForApplicant(modalItem.applicant_id)" :disabled="extensionModalLoading" style="margin-left:8px">Send Payment Agreement Extension Paper for sign</button>
           <button class="button" style="margin-left:8px" @click="closeExtensionModal()">Close</button>
         </div>
       </div>

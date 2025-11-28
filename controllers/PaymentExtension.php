@@ -250,8 +250,8 @@ class PaymentExtension {
 			$curArr = $cur;
 		}
 
-		$curArr['status'] = "submitted";
-        $curArr['final_signed_pdf'] = $signed_url;
+		$curArr['status']           = 'submitted';
+		$curArr['final_signed_pdf'] = $signed_url;
 		$curArr['signed_at']        = current_time( 'mysql' );
 
 		$wpdb->update(

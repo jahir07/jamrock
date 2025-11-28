@@ -37,7 +37,11 @@ export default {
     const currentPage = ref(1);
     const totalPages = ref(0);
     let pagesData = [];
-    const activePageStyle = reactive({ width: "0px", height: "0px" });
+    const activePageStyle = reactive({
+      width: "0px",
+      height: "0px",
+      position: "relative",
+    });
     const fields = ref([]);
     const formData = reactive({});
     let rawPdfBytes = null;
@@ -906,206 +910,285 @@ export default {
   },
 
   template: `
-  <div class="payment-extension-panel">
-    <!-- Submitted notice -->
-    <div v-if="item.payment_extension && item.payment_extension.status === 'submitted' && !showPanel" class="max-w-5xl mx-auto p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 mb-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="font-semibold">PDF submitted for review</div>
-          <div class="text-sm text-emerald-700 mt-1">Your signed agreement has been submitted and is pending review.</div>
+  <div class="payment-extension-panel font-sans text-slate-600">
+
+      <div v-if="item.payment_extension && item.payment_extension.status === 'submitted' && !showPanel" 
+         class="max-w-2xl mx-auto mt-8 bg-white rounded-2xl shadow-xl shadow-emerald-900/5 border border-slate-100 overflow-hidden">
+      
+      <div class="bg-emerald-50/50 p-8 text-center border-b border-emerald-50">
+        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white text-emerald-500 mb-6 shadow-sm ring-8 ring-emerald-50">
+          <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
         </div>
-        <div>
-          <button @click="handleResubmitClick" class="px-3 py-2 bg-white border rounded text-sm">Resubmit / Edit</button>
+        <h2 class="text-2xl font-bold text-slate-800 mb-2">Agreement Submitted</h2>
+        <p class="text-slate-500 max-w-md mx-auto">Your Payment Extension Agreement has been securely received.</p>
+      </div>
+
+      <div class="p-8">
+        <div class="flex gap-4 p-4 rounded-xl bg-blue-50/50 border border-blue-100 mb-8 items-start">
+           <div class="flex-shrink-0 mt-0.5 text-blue-500">
+             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+           </div>
+           <div class="text-sm text-slate-600">
+             <strong class="text-slate-800 block mb-1">What happens next?</strong>
+             Our finance team is currently reviewing your request. You will receive an email notification once the status changes.
+           </div>
+        </div>
+
+        <div class="flex justify-center">
+           <button @click="handleResubmitClick" class="group inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-slate-50 transition-all">
+              <svg class="w-4 h-4 text-slate-400 group-hover:text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+              View Document Details
+           </button>
         </div>
       </div>
     </div>
 
-    <!-- Main panel: hide when showPanel === false (submitted) -->
-    <div v-if="showPanel" class="bg-white rounded-2xl overflow-hidden">
-      <div class="flex items-center justify-between gap-6 px-6 py-5 border-b">
-        <div class="flex items-start gap-4">
-          <div class="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-[#E8A674] to-[#D9733A] text-white rounded-lg text-xl font-bold shadow-md">PE</div>
+    <div v-if="showPanel" class="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 ring-1 ring-slate-900/5">
+      
+      <div class="px-6 py-5 border-b border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6 bg-slate-50/50">
+        <div class="flex items-center gap-4 w-full md:w-auto">
+          <div class="flex items-center justify-center w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl shadow-lg shadow-indigo-500/20">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+          </div>
           <div>
-            <h1 class="text-2xl font-semibold text-slate-900">Payment Extension Agreement</h1>
-            <p class="text-sm text-slate-500 mt-0.5">Review the pre-filled details and sign to complete the agreement.</p>
+            <h1 class="text-xl font-bold text-slate-900">Payment Extension Agreement</h1>
+            <p class="text-sm text-slate-500">Review document details and sign below.</p>
           </div>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 w-full md:w-auto justify-end">
           
-          <div class="relative inline-flex items-center">
-            <button
-              @click="validateAndDownload"
-              :disabled="status !== 'success' || !isSigned"
-              :title="!isSigned ? 'Please sign the document before downloading' : 'Download signed PDF'"
-              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white shadow-md bg-gradient-to-r from-[#3b82f6] to-[#06b6d4] hover:from-[#2563eb] disabled:opacity-50 disabled:cursor-not-allowed">
-              <i class="fa-solid fa-download"></i> Download
-            </button>
-          </div>
+          <button
+            @click="validateAndDownload"
+            :disabled="status !== 'success' || !isSigned"
+            :class="[
+              'flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition-all focus:ring-2 focus:ring-offset-1 focus:ring-blue-500',
+              !isSigned || status !== 'success' 
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-blue-600'
+            ]"
+            :title="!isSigned ? 'Sign first' : 'Download PDF'">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            <span>Download</span>
+          </button>
 
-          <div class="relative inline-flex items-center">
-            <button @click="submitFilledPdf" :disabled="saving || !isSigned"
-                    :title="!isSigned ? 'Please sign before submitting' : (saving ? 'Submitting...' : 'Submit signed agreement')"
-                    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white shadow-md bg-gradient-to-r from-green-500 to-emerald-400 hover:from-green-600 disabled:opacity-50">
-              <i v-if="!saving" class="fa-solid fa-upload"></i>
-              <i v-else class="fa-solid fa-circle-notch fa-spin"></i>
-              <span>{{ saving ? 'Submitting...' : 'Submit' }}</span>
-            </button>
-          </div>
+          <button @click="submitFilledPdf" 
+                  :disabled="saving || !isSigned"
+                  :class="[
+                    'flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white shadow-md shadow-emerald-500/20 transition-all focus:ring-2 focus:ring-offset-1 focus:ring-emerald-500',
+                    saving || !isSigned
+                      ? 'bg-slate-300 cursor-not-allowed shadow-none'
+                      : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 transform hover:-translate-y-0.5'
+                  ]">
+            <svg v-if="saving" class="animate-spin -ml-1 mr-1 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            <span>{{ saving ? 'Submitting...' : 'Submit Agreement' }}</span>
+          </button>
         </div>
       </div>
 
-      <div class="pt-6 grid grid-cols-1 md:grid-cols-12 gap-6">
+      <div class="pt-6 pb-8 px-6 grid grid-cols-1 md:grid-cols-12 gap-8">
+        
         <section class="md:col-span-9">
-          <div class="rounded-lg border border-slate-100 bg-gradient-to-b from-white to-gray-50 p-4">
-            <div v-if="status === 'loading'" class="h-80 flex items-center justify-center">
-              <div class="text-slate-400 flex flex-col items-center gap-3"><i class="fa-solid fa-circle-notch fa-spin text-3xl"></i><div>Loading PDF…</div></div>
+          <div class="relative rounded-xl border border-slate-200 bg-slate-50 min-h-[500px] flex justify-center p-6 shadow-inner">
+            
+            <div v-if="status === 'loading'" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 bg-white/80 z-10 backdrop-blur-sm">
+              <svg class="animate-spin h-10 w-10 text-indigo-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+              <div class="text-sm font-medium">Generating Document...</div>
             </div>
 
-            <div v-if="status === 'success'" class="relative overflow-auto">
-              <div class="mx-auto" :style="activePageStyle">
-                <canvas ref="canvasRef" class="rounded-md block"></canvas>
+            <div v-if="status === 'error'" class="absolute inset-0 flex flex-col items-center justify-center text-red-500">
+               <svg class="w-12 h-12 mb-2 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+               <p>Unable to load PDF. Please refresh.</p>
+            </div>
+
+            <div v-if="status === 'success'" class="relative shadow-xl shadow-slate-200/50 transition-transform">
+              <div class="mx-auto bg-white" :style="activePageStyle">
+                <canvas ref="canvasRef" class="block"></canvas>
+                
                 <div class="absolute inset-0">
                   <template v-for="field in fields" :key="field.id">
                     <template v-if="field.pageIndex === (currentPage - 1)">
+                      
                       <div v-if="field.type==='signature'"
                            @click="openSignaturePad(field)"
                            :style="{ left: field.viewRect.x + 'px', top: field.viewRect.y + 'px', width: field.viewRect.w + 'px', height: field.viewRect.h + 'px' }"
-                           class="absolute flex items-center justify-center border-2 border-dashed rounded-lg bg-white/40 hover:bg-white/60 cursor-pointer transition">
-                        <template v-if="signatureDataUrl"><img :src="signatureDataUrl" class="max-w-full max-h-full object-contain rounded-md" /></template>
-                        <template v-else><div class="text-xs text-slate-700 font-semibold uppercase tracking-wide">Sign</div></template>
+                           class="group absolute flex items-center justify-center border-2 border-dashed rounded-lg cursor-pointer transition-all duration-200"
+                           :class="signatureDataUrl ? 'border-transparent bg-transparent' : 'border-indigo-400 bg-indigo-50/50 hover:bg-indigo-100/50 hover:border-indigo-500'">
+                        
+                        <template v-if="signatureDataUrl">
+                            <img :src="signatureDataUrl" class="max-w-full max-h-full object-contain" />
+                        </template>
+                        <template v-else>
+                            <div class="flex flex-col items-center animate-pulse group-hover:animate-none">
+                                <span class="text-[10px] uppercase font-bold text-indigo-600 tracking-wider">Click to Sign</span>
+                            </div>
+                        </template>
                       </div>
 
-                      <input v-else-if="field.type==='checkbox'" type="checkbox" :disabled="true" v-model="formData[field.name]"
+                      <input v-else-if="field.type==='checkbox'" type="checkbox" disabled v-model="formData[field.name]"
                              :style="{ left: field.viewRect.x + 'px', top: field.viewRect.y + 'px', width: field.viewRect.w + 'px', height: field.viewRect.h + 'px' }"
-                             class="absolute scale-110 opacity-80 cursor-not-allowed" />
+                             class="absolute scale-110 accent-indigo-600 cursor-default" />
 
-                      <input v-else-if="field.type==='radio'" type="radio" :name="field.name" :value="field.value" :disabled="true" v-model="formData[field.name]"
+                      <input v-else-if="field.type==='radio'" type="radio" :name="field.name" :value="field.value" disabled v-model="formData[field.name]"
                              :style="{ left: field.viewRect.x + 'px', top: field.viewRect.y + 'px', width: field.viewRect.w + 'px', height: field.viewRect.h + 'px' }"
-                             class="absolute opacity-80 cursor-not-allowed" />
+                             class="absolute accent-indigo-600 cursor-default" />
 
-                      <textarea v-else-if="field.type==='textarea'" :disabled="true" v-model="formData[field.name]"
+                      <textarea v-else-if="field.type==='textarea'" disabled v-model="formData[field.name]"
                                 :style="{ left: field.viewRect.x + 'px', top: field.viewRect.y + 'px', width: field.viewRect.w + 'px', height: field.viewRect.h + 'px' }"
-                                class="absolute !bg-transparent !border-none !shadow-none text-sm p-1 resize-none text-slate-900"></textarea>
+                                class="absolute bg-transparent border-none p-1 text-xs text-slate-800 resize-none font-medium"></textarea>
 
-                      <input v-else type="text" :disabled="true" v-model="formData[field.name]"
+                      <input v-else type="text" disabled v-model="formData[field.name]"
                              :style="{ left: field.viewRect.x + 'px', top: field.viewRect.y + 'px', width: field.viewRect.w + 'px', height: field.viewRect.h + 'px' }"
-                             class="absolute !bg-transparent !border-none !shadow-none text-sm p-1 text-slate-900" />
+                             class="absolute bg-transparent border-none p-1 text-xs text-slate-800 font-medium" />
                     </template>
                   </template>
                 </div>
               </div>
             </div>
-
-            <div v-if="status === 'error'" class="p-6 text-center text-sm text-red-600">Failed to load PDF. Check console for details.</div>
           </div>
         </section>
 
         <aside class="md:col-span-3">
-          <div class="sticky top-8 space-y-4">
-            <div class="bg-white rounded-lg border shadow-sm p-4">
-              <h3 class="text-sm font-semibold text-slate-700 mb-2">Tenant Details</h3>
-              <div class="text-sm text-slate-600 space-y-2">
-                <div><span class="font-medium text-slate-800">Tenant:</span> <span class="ml-2">{{ formData['tenant_first_name'] || formData['tenant_name'] }} {{ formData['tenant_last_name'] || '' }}</span></div>
-                <div><span class="font-medium text-slate-800">Address:</span> <span class="ml-2">{{ formData['rental_address'] || formData['Address'] || '' }}</span></div>
-                <div><span class="font-medium text-slate-800">Phone:</span> <span class="ml-2">{{ formData['phone'] || formData['tenant_phone'] || '' }}</span></div>
-                <div><span class="font-medium text-slate-800">Email:</span> <span class="ml-2">{{ formData['email'] || formData['tenant_email'] || '' }}</span></div>
-                <div><span class="font-medium text-slate-800">Signed Date:</span> <span class="ml-2">{{ formData['signed_date'] || formData['date'] || '' }}</span></div>
-              </div>
-            </div>
-
-            <div class="bg-white rounded-lg border shadow-sm p-4">
-              <h3 class="text-sm font-semibold text-slate-700 mb-2">Signature</h3>
-              <p class="text-xs text-slate-500 mb-3">Only the candidate may sign. Click the area on the document to open the signature pad.</p>
-
-              <div class="flex items-center gap-3">
-                <div class="w-16 h-10 bg-gray-50 rounded border flex items-center justify-center overflow-hidden">
-                  <template v-if="signatureDataUrl"><img :src="signatureDataUrl" class="object-cover w-full h-full" /></template>
-                  <template v-else><i class="fa-regular fa-pen-to-square text-slate-400"></i></template>
-                </div>
-                <div class="flex-1">
-                  <button @click="showSigModal = true" class="w-full px-3 py-2 bg-white border rounded text-sm hover:shadow">Open Signature Pad</button>
-                  
-                </div>
-              </div>
-            </div>
-            <span v-if="!isSigned" class="text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded">Signature required</span>
+          <div class="sticky top-6 space-y-6">
             
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">Agreement Details</h3>
+              <div class="space-y-4">
+                <div class="group">
+                    <label class="block text-xs text-slate-500 mb-1">Tenant Name</label>
+                    <div class="text-sm font-semibold text-slate-800 truncate">{{ formData['tenant_first_name'] || formData['tenant_name'] }} {{ formData['tenant_last_name'] }}</div>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Property Address</label>
+                    <div class="text-sm font-medium text-slate-800 leading-snug">{{ formData['rental_address'] || formData['Address'] || 'N/A' }}</div>
+                </div>
+                 <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">Phone</label>
+                        <div class="text-xs font-medium text-slate-800 truncate">{{ formData['phone'] || formData['tenant_phone'] || '-' }}</div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">Date</label>
+                        <div class="text-xs font-medium text-slate-800">{{ formData['signed_date'] || formData['date'] || '-' }}</div>
+                    </div>
+                 </div>
+              </div>
+            </div>
 
-            <div class="bg-white rounded-lg border shadow-sm p-4">
-              <h3 class="text-sm font-semibold text-slate-700 mb-2">Help</h3>
-              <p class="text-xs text-slate-500">Click the signature box on the PDF preview, draw or type your signature, then Download or Submit.</p>
+            <div class="bg-white rounded-xl border shadow-sm p-5 transition-colors" 
+                 :class="isSigned ? 'border-emerald-200 bg-emerald-50/30' : 'border-amber-200 bg-amber-50/30'">
+              <div class="flex justify-between items-start mb-2">
+                 <h3 class="text-sm font-bold text-slate-800">Signature Status</h3>
+                 <span v-if="!isSigned" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 uppercase tracking-wide">Required</span>
+                 <span v-else class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 uppercase tracking-wide">Signed</span>
+              </div>
+              
+              <div class="mt-3 mb-4">
+                 <div class="h-16 w-full bg-white rounded-lg border border-slate-200 border-dashed flex items-center justify-center overflow-hidden">
+                    <img v-if="signatureDataUrl" :src="signatureDataUrl" class="h-full object-contain p-2" />
+                    <span v-else class="text-xs text-slate-400 italic">Waiting for signature...</span>
+                 </div>
+              </div>
+
+              <button @click="showSigModal = true" 
+                      class="w-full py-2 px-4 rounded-lg text-sm font-medium border bg-white hover:bg-slate-50 transition-colors shadow-sm flex items-center justify-center gap-2"
+                      :class="isSigned ? 'text-slate-600 border-slate-200' : 'text-indigo-600 border-indigo-200 ring-2 ring-indigo-50'">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                  {{ isSigned ? 'Change Signature' : 'Sign Document' }}
+              </button>
+            </div>
+
+            <div class="flex gap-3 p-3 bg-blue-50 rounded-lg text-blue-700 text-xs">
+               <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+               <p>Click the dashed box on the document or the button above to sign. You can draw or type your signature.</p>
             </div>
           </div>
         </aside>
       </div>
     </div>
 
-    <!-- signature modal -->
     <div v-if="showSigModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40"></div>
-      <div class="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
-        <div class="flex items-center justify-between px-6 py-4 pb-0 border-b">
-          <h3 class="text-lg font-semibold">Sign Document</h3>
-          <button @click="showSigModal=false" class="text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+      <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" @click="showSigModal=false"></div>
+      
+      <div class="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden transform transition-all scale-100">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+          <h3 class="text-lg font-bold text-slate-800">Add Signature</h3>
+          <button @click="showSigModal=false" class="text-slate-400 hover:text-slate-600 transition-colors">
+             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
         </div>
 
-        <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div class="md:col-span-2">
-            <div class="bg-gray-50 rounded-lg border p-4">
-              <div class="mb-3 flex gap-2">
-                <button @click="signatureMode='draw'" :class="signatureMode==='draw' ? 'bg-white shadow-sm' : 'text-slate-500'" class="px-3 py-2 rounded">Draw</button>
-                <button @click="signatureMode='type'" :class="signatureMode==='type' ? 'bg-white shadow-sm' : 'text-slate-500'" class="px-3 py-2 rounded">Type</button>
-              </div>
+        <div class="p-6">
+          <div class="flex p-1 bg-slate-100 rounded-lg mb-6">
+            <button @click="signatureMode='draw'" 
+                    :class="signatureMode==='draw' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                    class="flex-1 py-2 text-sm font-semibold rounded-md transition-all">Draw</button>
+            <button @click="signatureMode='type'" 
+                    :class="signatureMode==='type' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                    class="flex-1 py-2 text-sm font-semibold rounded-md transition-all">Type</button>
+          </div>
 
-              <div v-show="signatureMode==='draw'">
-                <div class="bg-white border rounded-lg p-3">
-                  <VueSignaturePad ref="sigPadRef" width="100%" height="180px" :options="sigOptions" />
-                </div>
-                <div class="flex justify-between mt-3">
-                  <button @click="clearSignature" class="text-sm text-red-600">Clear</button>
-                  <div class="text-sm text-slate-400">Draw your signature above (auto-capture enabled)</div>
-                </div>
-              </div>
-
-              <div v-show="signatureMode==='type'">
-                <input v-model="typedSignature" type="text" class="w-full border rounded px-3 py-2" placeholder="Type your name" />
-                <div class="mt-3 p-6 border rounded text-center bg-white">
-                  <div style="font-family: 'Pacifico', cursive; font-size: 34px;">{{ typedSignature || 'Signature' }}</div>
-                </div>
-              </div>
+          <div v-show="signatureMode==='draw'">
+            <div class="relative border-2 border-slate-200 rounded-xl overflow-hidden bg-white hover:border-indigo-300 transition-colors">
+               <VueSignaturePad ref="sigPadRef" width="100%" height="200px" :options="sigOptions" class="cursor-crosshair" />
+               <div class="absolute bottom-2 right-2 text-[10px] text-slate-300 pointer-events-none">Sign Here</div>
+            </div>
+            <div class="flex justify-between mt-2">
+               <button @click="clearSignature" class="text-xs text-red-500 hover:text-red-700 font-medium flex items-center gap-1">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                  Clear
+               </button>
+               <span class="text-xs text-slate-400">Use your mouse or finger</span>
             </div>
           </div>
 
-          <aside class="md:col-span-1 flex flex-col gap-3">
-            <div class="bg-white border rounded-lg p-3 text-sm text-slate-600">
-              <div class="font-medium text-slate-800 mb-1">Preview</div>
-              <div class="w-full h-20 bg-gray-50 rounded flex items-center justify-center overflow-hidden">
-                <template v-if="signatureDataUrl"><img :src="signatureDataUrl" class="object-contain w-full h-full" /></template>
-                <template v-else><i class="fa-regular fa-pen-to-square text-slate-300"></i></template>
-              </div>
-            </div>
+          <div v-show="signatureMode==='type'">
+             <div class="space-y-4">
+                <div>
+                   <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Enter your full name</label>
+                   <input v-model="typedSignature" type="text" class="w-full border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-slate-800 placeholder:text-slate-300" placeholder="e.g. John Doe" />
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Preview</label>
+                    <div class="h-24 flex items-center justify-center border border-slate-200 rounded-lg bg-slate-50 text-indigo-600 overflow-hidden px-4">
+                       <div style="font-family: 'Pacifico', cursive; font-size: 32px; white-space: nowrap;">{{ typedSignature || 'Your Signature' }}</div>
+                    </div>
+                </div>
+             </div>
+          </div>
+        </div>
 
-            <div class="flex gap-2">
-              <button @click="showSigModal=false" class="flex-1 px-3 py-2 rounded border text-sm">Cancel</button>
-              <button @click="saveSignature" class="flex-1 px-3 py-2 rounded bg-gradient-to-r from-[#06b6d4] to-[#3b82f6] text-white">Apply</button>
-            </div>
-          </aside>
+        <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+          <button @click="showSigModal=false" class="px-5 py-2.5 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-white transition-colors">Cancel</button>
+          <button @click="saveSignature" class="px-6 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all">Apply Signature</button>
         </div>
       </div>
     </div>
 
-    <!-- generic modal -->
     <div v-if="modal.show" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40"></div>
-      <div class="relative max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
-        <div class="p-6">
-          <h3 class="text-lg font-semibold text-slate-900 mb-2">{{ modal.title }}</h3>
-          <p class="text-sm text-slate-600">{{ modal.message }}</p>
+      <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
+      <div class="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center transform transition-all scale-100">
+        
+        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4"
+             :class="{
+               'bg-emerald-100': modal.type === 'success',
+               'bg-red-100': modal.type === 'error',
+               'bg-blue-100': modal.type === 'info'
+             }">
+            <svg v-if="modal.type === 'success'" class="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            <svg v-else-if="modal.type === 'error'" class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            <svg v-else class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         </div>
-        <div class="flex justify-end gap-3 p-4 border-t bg-slate-50">
-          <button @click="closeModal" class="px-4 py-2 rounded bg-white border text-sm">Cancel</button>
-          <button v-if="modal.onConfirm" @click="handleModalConfirm" class="px-4 py-2 rounded bg-indigo-600 text-white">OK</button>
+
+        <h3 class="text-lg font-bold text-slate-900 mb-2">{{ modal.title }}</h3>
+        <p class="text-sm text-slate-500 mb-6">{{ modal.message }}</p>
+        
+        <div class="flex gap-3 justify-center">
+          <button @click="closeModal" class="flex-1 px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-50">Close</button>
+          <button v-if="modal.onConfirm" @click="handleModalConfirm" class="flex-1 px-4 py-2 bg-indigo-600 rounded-lg text-white font-medium hover:bg-indigo-700">{{ modal.confirmText || 'Confirm' }}</button>
         </div>
       </div>
     </div>

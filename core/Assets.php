@@ -198,15 +198,5 @@ class Assets {
 			JRJ_VERSION,
 			true      // load in footer.
 		);
-
-		// Block: Form.
-		$asset_file = include JRJ_PATH . '/assets/blocks/index.asset.php';
-		wp_enqueue_script(
-			'jamrock-blocks',
-			JRJ_ASSETS . '/blocks/index.js',
-			$asset_file['dependencies'],
-			$asset_file['version'],
-			true
-		);
 	}
 }
