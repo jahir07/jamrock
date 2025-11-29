@@ -35900,6 +35900,18 @@ const compile = () => {
 
 /***/ }),
 
+/***/ "./admin.scss":
+/*!********************!*\
+  !*** ./admin.scss ***!
+  \********************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+// extracted by mini-css-extract-plugin
+
+
+/***/ }),
+
 /***/ "./components/ApplicantsWithComposite.js":
 /*!***********************************************!*\
   !*** ./components/ApplicantsWithComposite.js ***!
@@ -36976,154 +36988,6 @@ __webpack_require__.r(__webpack_exports__);
 
 /***/ }),
 
-/***/ "./components/FeedbackList.js":
-/*!************************************!*\
-  !*** ./components/FeedbackList.js ***!
-  \************************************/
-/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
-
-__webpack_require__.r(__webpack_exports__);
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
-/* harmony export */ });
-/* harmony import */ var vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue/dist/vue.esm-bundler.js */ "../../node_modules/.pnpm/vue@3.5.22_typescript@5.9.3/node_modules/vue/dist/vue.esm-bundler.js");
-/* global JRJ_ADMIN */
-
-const api = async (path, {
-  method = 'GET',
-  body
-} = {}) => {
-  const res = await fetch(JRJ_ADMIN.root + path, {
-    method,
-    headers: {
-      'X-WP-Nonce': JRJ_ADMIN.nonce,
-      'Content-Type': 'application/json'
-    },
-    body: body ? JSON.stringify(body) : undefined
-  });
-  if (!res.ok) {
-    throw new Error((await res.json()).message || 'Request failed');
-  }
-  return res.json();
-};
-const FeedbackList = {
-  name: 'FeedbackList',
-  setup() {
-    const items = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)([]);
-    const total = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(0);
-    const page = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(1);
-    const perPage = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(10);
-    const loading = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(false);
-    const editing = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.reactive)({});
-    const load = async () => {
-      loading.value = true;
-      try {
-        const data = await api(`feedback?page=${page.value}&per_page=${perPage.value}`);
-        items.value = data.items || [];
-        total.value = data.total || 0;
-      } finally {
-        loading.value = false;
-      }
-    };
-    const editRow = row => {
-      editing[row.id] = {
-        subject: row.subject,
-        message: row.message
-      };
-    };
-    const saveRow = async row => {
-      const payload = editing[row.id] || {};
-      await api(`feedback/${row.id}`, {
-        method: 'POST',
-        body: payload
-      });
-      delete editing[row.id];
-      await load();
-    };
-    const deleteRow = async row => {
-      if (!confirm(JRJ_ADMIN.i18n.areYouSure)) return;
-      await api(`feedback/${row.id}`, {
-        method: 'DELETE'
-      });
-      await load();
-    };
-    (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.onMounted)(load);
-    return {
-      items,
-      total,
-      page,
-      perPage,
-      loading,
-      editing,
-      load,
-      editRow,
-      saveRow,
-      deleteRow
-    };
-  },
-  template: `
-        <div class="jrj-card">
-            <h2>All Feedback</h2>
-
-            <div class="jrj-toolbar">
-                <label>Per page:
-                    <select v-model.number="perPage" @change="page=1; load()">
-                        <option :value="10">10</option>
-                        <option :value="20">20</option>
-                        <option :value="50">50</option>
-                    </select>
-                </label>
-            </div>
-
-            <table class="jrj-table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>First</th>
-                        <th>Last</th>
-                        <th>Email</th>
-                        <th>Subject</th>
-                        <th>Message</th>
-                        <th style="width:140px;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-if="loading"><td colspan="7">Loading…</td></tr>
-                    <tr v-for="row in items" :key="row.id">
-                        <td>{{ row.id }}</td>
-                        <td>{{ row.first_name }}</td>
-                        <td>{{ row.last_name }}</td>
-                        <td>{{ row.email }}</td>
-                        <td>
-                            <div v-if="!editing[row.id]">{{ row.subject }}</div>
-                            <input v-else v-model="editing[row.id].subject" />
-                        </td>
-                        <td>
-                            <div v-if="!editing[row.id]" class="ellipsis">{{ row.message }}</div>
-                            <textarea v-else v-model="editing[row.id].message"></textarea>
-                        </td>
-                        <td>
-                            <button v-if="!editing[row.id]" class="button button-small" @click="editRow(row)">Edit</button>
-                            <button v-else class="button button-primary button-small" @click="saveRow(row)">Save</button>
-                            <button class="button button-link-delete button-small" @click="deleteRow(row)">Delete</button>
-                        </td>
-                    </tr>
-                    <tr v-if="!loading && items.length===0"><td colspan="7">No items found.</td></tr>
-                </tbody>
-            </table>
-
-            <div class="jrj-pagination" v-if="total > perPage">
-                <button class="button" :disabled="page===1" @click="page--; load()">«</button>
-                <span>Page {{ page }}</span>
-                <button class="button" :disabled="page * perPage >= total" @click="page++; load()">»</button>
-            </div>
-        </div>
-    `
-};
-/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (FeedbackList);
-
-/***/ }),
-
 /***/ "./components/HousingList.js":
 /*!***********************************!*\
   !*** ./components/HousingList.js ***!
@@ -37134,263 +36998,790 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
 /* harmony export */ });
-/* harmony import */ var vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue/dist/vue.esm-bundler.js */ "../../node_modules/.pnpm/vue@3.5.22_typescript@5.9.3/node_modules/vue/dist/vue.esm-bundler.js");
+/* harmony import */ var vue__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue */ "../../node_modules/.pnpm/vue@3.5.22_typescript@5.9.3/node_modules/vue/dist/vue.runtime.esm-bundler.js");
 /* global JRJ_ADMIN */
 
+function safeParseJson(v) {
+  if (!v) return null;
+  if (typeof v === "object") return v;
+  try {
+    return JSON.parse(v);
+  } catch (e) {
+    return null;
+  }
+}
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
   name: "HousingList",
   setup() {
-    const items = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)([]);
-    const total = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(0);
-    const page = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(1);
-    const perPage = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(10);
-    const loading = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(false);
-    const error = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)("");
-    const filter = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.reactive)({
-      q: "",
-      visibility: "",
-      category: ""
+    const items = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)([]);
+    const total = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(0);
+    const page = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(1);
+    const perPage = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(10);
+    const loading = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(false);
+
+    // Filters
+    const filter = (0,vue__WEBPACK_IMPORTED_MODULE_0__.reactive)({
+      status: "",
+      extension_status: ""
     });
-    const modalOpen = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(false);
-    const editing = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(null); // null => create; {id,...} => update
-    const form = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.reactive)({
-      title: "",
-      url: "",
-      category: "",
-      visibility: "public",
-      sort_order: 0,
-      notes: ""
+
+    // UI State
+    const activeTab = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)("history"); // for medical modal
+
+    // Notice System
+    const notice = (0,vue__WEBPACK_IMPORTED_MODULE_0__.reactive)({
+      show: false,
+      type: "success",
+      message: ""
     });
-    const saving = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.ref)(false);
-    const getJSON = async path => {
-      const res = await fetch(JRJ_ADMIN.root + path, {
-        headers: {
-          "X-WP-Nonce": JRJ_ADMIN.nonce,
-          "Cache-Control": "no-store"
-        }
-      });
-      if (!res.ok) throw new Error((await res.json()).message || "Request failed");
-      return res.json();
-    };
-    const postJSON = async (path, body) => {
-      const res = await fetch(JRJ_ADMIN.root + path, {
-        method: "POST",
-        headers: {
-          "X-WP-Nonce": JRJ_ADMIN.nonce,
-          "Content-Type": "application/json"
-        },
-        body: body ? JSON.stringify(body) : undefined
-      });
-      if (!res.ok) throw new Error((await res.json()).message || "Request failed");
-      return res.json();
-    };
-    const delJSON = async path => {
-      const res = await fetch(JRJ_ADMIN.root + path, {
-        method: "DELETE",
-        headers: {
-          "X-WP-Nonce": JRJ_ADMIN.nonce
-        }
-      });
-      if (!res.ok) throw new Error((await res.json()).message || "Request failed");
-      return res.json();
-    };
+    let noticeTimer = null;
+    function showNotice(type, msg, ms = 4000) {
+      if (noticeTimer) clearTimeout(noticeTimer);
+      notice.type = type;
+      notice.message = msg;
+      notice.show = true;
+      noticeTimer = setTimeout(() => notice.show = false, ms);
+    }
+
+    // Modals
+    const modalOpen = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(false); // Housing Details
+    const medicalModalOpen = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(false); // Medical Details
+    const extensionModalOpen = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(false); // Payment Extension
+
+    const modalItem = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(null); // Active Item context
+    const medicalItem = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(null); // Medical data
+    const modalLoading = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(false);
+    const modalRejection = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)("");
+    const extensionModalLoading = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(false);
+
+    // Extension Form Data
+    const extensionForm = (0,vue__WEBPACK_IMPORTED_MODULE_0__.reactive)({
+      tenant_first_name: "",
+      tenant_last_name: "",
+      rental_address: "",
+      tenant_phone: "",
+      tenant_email: "",
+      due_on: "",
+      signed_date: "",
+      extended_until: "",
+      note: "",
+      enabled: 0
+    });
+
+    // --- Load List ---
     const load = async () => {
       loading.value = true;
-      error.value = "";
       try {
         const q = new URLSearchParams({
-          page: page.value,
-          per_page: perPage.value,
-          q: filter.q || "",
-          visibility: filter.visibility || "",
-          category: filter.category || ""
+          page: String(page.value),
+          per_page: String(perPage.value),
+          status: filter.status || "",
+          extension_status: filter.extension_status || ""
         });
-        const data = await getJSON("housing?" + q.toString());
-        items.value = data.items || [];
-        total.value = data.total || 0;
+        const url = `${JRJ_ADMIN.root}housing/applicants?${q.toString()}`;
+        const res = await fetch(url, {
+          method: "GET",
+          credentials: "same-origin",
+          headers: {
+            "X-WP-Nonce": JRJ_ADMIN.nonce
+          }
+        });
+        const json = await res.json();
+        if (json.ok) {
+          const rawItems = json.items || [];
+          items.value = rawItems.map(item => {
+            item.payment_extension = safeParseJson(item.payment_extension) || {};
+            item.for_rental = safeParseJson(item.for_rental) || {};
+            return item;
+          });
+          total.value = json.total || 0;
+        }
       } catch (e) {
-        error.value = e.message || "Failed to load";
+        console.error("housing list load error", e);
+        showNotice("error", "Failed to load housing list: " + (e.message || e));
       } finally {
         loading.value = false;
       }
     };
-    const openCreate = () => {
-      editing.value = null;
-      Object.assign(form, {
-        title: "",
-        url: "",
-        category: "",
-        visibility: "public",
-        sort_order: 0,
-        notes: ""
-      });
+
+    // --- Housing Detail Logic ---
+    const openDetail = async id => {
       modalOpen.value = true;
-    };
-    const openEdit = row => {
-      editing.value = row;
-      Object.assign(form, {
-        title: row.title || "",
-        url: row.url || "",
-        category: row.category || "",
-        visibility: row.visibility_status || "public",
-        sort_order: row.sort_order || 0,
-        notes: row.notes || ""
-      });
-      modalOpen.value = true;
-    };
-    const save = async () => {
-      saving.value = true;
+      modalLoading.value = true;
       try {
-        if (editing.value) {
-          await postJSON(`housing/${editing.value.id}`, form);
-        } else {
-          await postJSON("housing", form);
+        const res = await fetch(`${JRJ_ADMIN.root}housing/applicants/${id}`, {
+          headers: {
+            "X-WP-Nonce": JRJ_ADMIN.nonce
+          }
+        });
+        const json = await res.json();
+        if (json.ok && json.item) {
+          const it = json.item;
+          ["for_rental", "for_verification", "payment_extension", "fields_json"].forEach(k => {
+            it[k] = safeParseJson(it[k]);
+          });
+          modalItem.value = it;
         }
-        modalOpen.value = false;
-        await load();
       } catch (e) {
-        alert(e.message || "Save failed");
+        showNotice("error", "Fetch error");
       } finally {
-        saving.value = false;
+        modalLoading.value = false;
       }
     };
-    const toggle = async row => {
+    const updateHousingStatus = async status => {
+      if (!modalItem.value) return;
+      if (status === "rejected" && !modalRejection.value) {
+        return showNotice("error", "Rejection reason required");
+      }
+      modalLoading.value = true;
       try {
-        const resp = await postJSON(`housing/${row.id}/toggle`);
-        row.visibility_status = resp.visibility;
+        const body = new URLSearchParams();
+        body.append("status", status);
+        if (status === "rejected") body.append("rejection_reason", modalRejection.value);
+        await fetch(`${JRJ_ADMIN.root}housing/applicants/${modalItem.value.id}`, {
+          method: "POST",
+          headers: {
+            "X-WP-Nonce": JRJ_ADMIN.nonce
+          },
+          body
+        });
+        showNotice("success", "Status updated");
+        modalOpen.value = false;
+        load();
       } catch (e) {
-        alert(e.message || "Toggle failed");
+        showNotice("error", e.message);
+      } finally {
+        modalLoading.value = false;
       }
     };
-    const checkUrl = async row => {
+
+    // --- Medical Logic ---
+    const openMedicalDetail = async housingId => {
+      medicalModalOpen.value = true;
+      modalLoading.value = true;
+      medicalItem.value = null;
+      activeTab.value = "history";
       try {
-        const resp = await postJSON(`housing/${row.id}/check`);
-        // reflect http_status in UI without full reload
-        row.http_status = resp.http_status || null;
-        await load(); // or just leave optimistic
+        const res = await fetch(`${JRJ_ADMIN.root}housing/applicants/${housingId}/medical`, {
+          headers: {
+            "X-WP-Nonce": JRJ_ADMIN.nonce
+          }
+        });
+        const json = await res.json();
+        if (json.ok) {
+          medicalItem.value = json.item;
+        } else {
+          showNotice("warning", "No medical record found.");
+        }
       } catch (e) {
-        alert(e.message || "Check failed");
+        showNotice("error", "Medical fetch error");
+      } finally {
+        modalLoading.value = false;
       }
     };
-    const remove = async row => {
-      if (!confirm("Delete this item?")) return;
+    const updateMedicalStatus = async status => {
+      if (!medicalItem.value) return;
+      modalLoading.value = true;
       try {
-        await delJSON(`housing/${row.id}`);
+        const url = `${JRJ_ADMIN.root}housing/medical/${medicalItem.value.id}/status`;
+        const body = new URLSearchParams();
+        body.append("status", status);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "X-WP-Nonce": JRJ_ADMIN.nonce
+          },
+          body
+        });
+        const json = await res.json();
+        if (json.ok) {
+          showNotice("success", `Medical Clearance ${status}`);
+          medicalItem.value.medical_clearance_status = status;
+        } else {
+          throw new Error(json.error);
+        }
+      } catch (e) {
+        showNotice("error", "Update failed");
+      } finally {
+        modalLoading.value = false;
+      }
+    };
+
+    // --- Payment Extension Logic ---
+    function isExtensionEnabled(item) {
+      const p = item.extension_enabled;
+      if (!p) return false;
+      return Number(p) === 1;
+    }
+
+    // Enable / Disable Extension
+    async function toggleExtension(applicantId, enable = 1, show_candidate = 0) {
+      try {
+        const body = new URLSearchParams();
+        body.append("enable", enable ? "1" : "0");
+        body.append("show_candidate", show_candidate);
+        const res = await fetch(`${JRJ_ADMIN.root}housing/applicants/${applicantId}/extension`, {
+          method: "POST",
+          headers: {
+            "X-WP-Nonce": JRJ_ADMIN.nonce
+          },
+          body
+        });
+        const j = await res.json();
+        if (!res.ok || !j.ok) throw new Error(j.error || "Failed");
+        await load();
+        showNotice("success", enable ? "Extension Enabled." : "Extension Revoked.");
+      } catch (e) {
+        showNotice("error", e.message);
+      }
+    }
+    function openExtensionModal(item) {
+      if (!item) return;
+      modalItem.value = item;
+
+      // Reset Form
+      Object.assign(extensionForm, {
+        tenant_first_name: "",
+        tenant_last_name: "",
+        rental_address: "",
+        tenant_phone: "",
+        tenant_email: "",
+        due_on: "",
+        signed_date: "",
+        extended_until: "",
+        note: "",
+        enabled: 0
+      });
+
+      // Parse Data Sources
+      const ext = safeParseJson(item.payment_extension) || item.payment_extension || {};
+      const fieldsFromPaymentExt = safeParseJson(ext.fields_json) || {};
+      const globalFields = safeParseJson(item.fields_json) || {};
+      const forRental = safeParseJson(item.for_rental) || {};
+      const forVerification = safeParseJson(item.for_verification) || {};
+
+      // Intelligent Mapping (Restored from your code)
+      extensionForm.tenant_first_name = fieldsFromPaymentExt.tenant_first_name || globalFields.tenant_first_name || forRental.tenant_first_name || forVerification.tenant_first_name || item.name?.split?.(" ")?.[0] || "";
+      extensionForm.tenant_last_name = fieldsFromPaymentExt.tenant_last_name || globalFields.tenant_last_name || forRental.tenant_last_name || forVerification.tenant_last_name || item.name?.split?.(" ")?.slice(1).join(" ") || "";
+      extensionForm.rental_address = fieldsFromPaymentExt.rental_address || globalFields.rental_address || forRental.address_line1 || forVerification.rental_address || "";
+      extensionForm.tenant_phone = fieldsFromPaymentExt.phone || globalFields.phone || forRental.phone || forVerification.phone || item.phone || "";
+      extensionForm.tenant_email = fieldsFromPaymentExt.email || globalFields.email || forRental.email || forVerification.email || item.email || "";
+      extensionForm.due_on = fieldsFromPaymentExt.due_on || globalFields.due_on || item.original_due_date || "";
+      extensionForm.signed_date = fieldsFromPaymentExt.date || globalFields.date || "";
+
+      // Meta
+      extensionForm.extended_until = ext.extended_until || "";
+      extensionForm.note = ext.notes || ext.note || "";
+      extensionForm.enabled = ext.enabled ? 1 : 0;
+      extensionModalOpen.value = true;
+    }
+    async function saveExtensionForApplicant(applicantId) {
+      extensionModalLoading.value = true;
+      try {
+        const fields_json_obj = {
+          tenant_first_name: extensionForm.tenant_first_name || "",
+          tenant_last_name: extensionForm.tenant_last_name || "",
+          rental_address: extensionForm.rental_address || "",
+          phone: extensionForm.tenant_phone || "",
+          email: extensionForm.tenant_email || "",
+          due_on: extensionForm.due_on || "",
+          date: extensionForm.signed_date || ""
+        };
+        const body = new URLSearchParams();
+        body.append("enable", 1); // main panel.
+        body.append("show_candidate", 1); // candidate panel.
+        body.append("extended_until", extensionForm.extended_until || "");
+        body.append("note", extensionForm.note || "");
+        body.append("status", "pending");
+        body.append("fields_json", JSON.stringify(fields_json_obj));
+        const res = await fetch(`${JRJ_ADMIN.root}housing/applicants/${applicantId}/extension`, {
+          method: "POST",
+          headers: {
+            "X-WP-Nonce": JRJ_ADMIN.nonce
+          },
+          body
+        });
+        const j = await res.json();
+        if (!res.ok || !j.ok) throw new Error(j.message || "Failed");
+        showNotice("success", "Extension saved & agreement enabled.");
+        extensionModalOpen.value = false;
         await load();
       } catch (e) {
-        alert(e.message || "Delete failed");
+        showNotice("error", e.message);
+      } finally {
+        extensionModalLoading.value = false;
+      }
+    }
+    async function extensionUpdateStatus(id, status) {
+      extensionModalLoading.value = true;
+      try {
+        const body = new URLSearchParams();
+        body.append("id", id);
+        body.append("status", status);
+        // reusing housing status update logic but context is extension modal
+        const res = await fetch(`${JRJ_ADMIN.root}payment-extensions/${id}/status`, {
+          method: "POST",
+          headers: {
+            "X-WP-Nonce": JRJ_ADMIN.nonce
+          },
+          body
+        });
+        const j = await res.json();
+        if (!res.ok || !j.ok) throw new Error("Update failed");
+        showNotice("success", "Status updated.");
+        extensionModalOpen.value = false;
+        await load();
+      } catch (e) {
+        showNotice("error", e.message);
+      } finally {
+        extensionModalLoading.value = false;
+      }
+    }
+
+    // --- Helpers ---
+    const statusClass = s => {
+      if (!s) return "bg-gray-100 text-gray-600";
+      switch (s.toLowerCase()) {
+        case "approved":
+          return "bg-emerald-100 text-emerald-700 border-emerald-200";
+        case "rejected":
+          return "bg-red-100 text-red-700 border-red-200";
+        case "submitted":
+        case "pending":
+          return "bg-amber-100 text-amber-700 border-amber-200";
+        default:
+          return "bg-blue-50 text-blue-600 border-blue-100";
       }
     };
-    (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.onMounted)(load);
-    const pageCount = (0,vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__.computed)(() => Math.ceil(total.value / perPage.value));
+    const pretty = str => str.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+    const nextDay = () => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().split("T")[0];
+    };
+    const getDynamicUrl = url => {
+      if (!url) return "";
+      const currentProtocol = window.location.protocol;
+      const urlWithoutProtocol = url.replace(/^https?:\/\//i, "");
+      return `${currentProtocol}//${urlWithoutProtocol}`;
+    };
+    (0,vue__WEBPACK_IMPORTED_MODULE_0__.onMounted)(load);
     return {
       items,
       total,
       page,
       perPage,
       loading,
-      error,
       filter,
-      modalOpen,
-      form,
-      editing,
-      saving,
       load,
-      openCreate,
-      openEdit,
-      save,
-      toggle,
-      checkUrl,
-      remove,
-      pageCount
+      // Housing
+      modalOpen,
+      modalItem,
+      modalLoading,
+      modalRejection,
+      openDetail,
+      updateHousingStatus,
+      // Medical
+      medicalModalOpen,
+      medicalItem,
+      openMedicalDetail,
+      updateMedicalStatus,
+      activeTab,
+      // Extension
+      extensionModalOpen,
+      extensionForm,
+      extensionModalLoading,
+      openExtensionModal,
+      toggleExtension,
+      saveExtensionForApplicant,
+      isExtensionEnabled,
+      extensionUpdateStatus,
+      // UI
+      notice,
+      showNotice,
+      statusClass,
+      pretty,
+      nextDay,
+      getDynamicUrl
     };
   },
   template: `
-  <div class="jrj-card">
-    <h2>Housing Links</h2>
-
-    <div class="jrj-toolbar">
-      <input type="search" placeholder="Search title or URL…" v-model="filter.q" @keyup.enter="page=1; load()" />
-      <label>Visibility
-        <select v-model="filter.visibility" @change="page=1; load()">
-          <option value="">All</option>
-          <option value="public">public</option>
-          <option value="private">private</option>
-          <option value="hidden">hidden</option>
+  <div class="p-6 max-w-[1400px] mx-auto font-sans text-slate-600">
+    
+    <div class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+      <div>
+        <h2 class="text-2xl font-bold text-slate-800">Housing & Rental Manager</h2>
+        <p class="text-sm text-slate-500">Manage applications, medical clearances, and payment extensions.</p>
+      </div>
+      
+      <div class="flex flex-wrap gap-3 bg-white p-2 rounded-lg border shadow-sm">
+        <select v-model="filter.status" @change="page=1; load()" class="text-sm border-none bg-slate-50 rounded px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 outline-none">
+          <option value="">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
         </select>
-      </label>
-      <input type="text" placeholder="Category" v-model="filter.category" @keyup.enter="page=1; load()" />
-      <button class="button" @click="page=1; load()">Filter</button>
-      <span style="flex:1"></span>
-      <button class="button button-primary" @click="openCreate">Add Link</button>
+        
+        <select v-model="filter.extension_status" @change="page=1; load()" class="text-sm border-none bg-slate-50 rounded px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 outline-none">
+          <option value="">Any Extension</option>
+          <option value="enabled">Ext. Enabled</option>
+          <option value="disabled">Ext. Disabled</option>
+        </select>
+
+        <select v-model.number="perPage" @change="page=1; load()" class="text-sm border-none bg-slate-50 rounded px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 outline-none">
+          <option :value="10">10 / page</option>
+          <option :value="20">20 / page</option>
+          <option :value="50">50 / page</option>
+        </select>
+      </div>
     </div>
 
-    <div v-if="error" class="notice notice-error" style="margin:8px 0;">{{ error }}</div>
-
-    <table class="jrj-table">
-      <thead>
-        <tr>
-          <th>#</th><th>Title</th><th>URL</th><th>Category</th><th>Vis</th>
-          <th>HTTP</th><th>Checked</th><th>Updated</th><th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-if="loading"><td colspan="9">Loading…</td></tr>
-        <tr v-for="r in items" :key="r.id">
-          <td>{{ r.id }}</td>
-          <td>{{ r.title }}</td>
-          <td><a :href="r.url" target="_blank" rel="noopener">{{ r.url }}</a></td>
-          <td>{{ r.category || '—' }}</td>
-          <td>{{ r.visibility_status }}</td>
-          <td>{{ r.http_status || '—' }}</td>
-          <td>{{ r.last_checked || '—' }}</td>
-          <td>{{ r.updated_at }}</td>
-          <td class="actions">
-            <button class="button" @click="toggle(r)">Toggle</button>
-            <button class="button" @click="checkUrl(r)">Check</button>
-            <button class="button" @click="openEdit(r)">Edit</button>
-            <button class="button" @click="remove(r)">Delete</button>
-          </td>
-        </tr>
-        <tr v-if="!loading && items.length===0"><td colspan="9">No items</td></tr>
-      </tbody>
-    </table>
-
-    <div class="jrj-pagination" v-if="pageCount > 1">
-      <button class="button" :disabled="page===1" @click="page--; load()">«</button>
-      <span>Page {{ page }} / {{ pageCount }}</span>
-      <button class="button" :disabled="page>=pageCount" @click="page++; load()">»</button>
+    <div v-if="notice.show" :class="notice.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'" class="mb-4 p-4 rounded-lg border text-sm font-medium flex items-center gap-2">
+       <span v-if="notice.type==='success'">✓</span><span v-else>⚠️</span>
+       {{ notice.message }}
     </div>
 
-    <div v-if="modalOpen" class="jrj-modal">
-      <div class="jrj-modal-body">
-        <button class="jrj-modal-close" @click="modalOpen=false">×</button>
-        <h3>{{ editing ? 'Edit Link' : 'Add Link' }}</h3>
-        <table class="form-table"><tbody>
-          <tr><th><label>Title</label></th><td><input type="text" v-model="form.title" /></td></tr>
-          <tr><th><label>URL</label></th><td><input type="url" v-model="form.url" placeholder="https://..." /></td></tr>
-          <tr><th><label>Category</label></th><td><input type="text" v-model="form.category" /></td></tr>
-          <tr><th><label>Visibility</label></th>
-              <td>
-                <select v-model="form.visibility">
-                  <option value="public">public</option>
-                  <option value="private">private</option>
-                  <option value="hidden">hidden</option>
-                </select>
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <th class="p-4">Applicant</th>
+              <th class="p-4">Contact</th>
+              <th class="p-4">Housing Status</th>
+              <th class="p-4">Housing Actions</th>
+              <th class="p-4">Payment Extension</th>
+              <th class="p-4 text-right">Medical</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-sm">
+            <tr v-if="loading"><td colspan="6" class="p-8 text-center text-slate-400">Loading data...</td></tr>
+            <tr v-else-if="items.length === 0"><td colspan="6" class="p-8 text-center text-slate-400">No applications found.</td></tr>
+            
+            <tr v-else v-for="item in items" :key="item.id" class="hover:bg-slate-50 transition-colors">
+              <td class="p-4">
+                <div class="font-medium text-slate-900">{{ item.name || item.full_name || 'Unknown' }}</div>
+                <div class="text-xs text-slate-400">ID: {{ item.applicant_id }}</div>
               </td>
-          </tr>
-          <tr><th><label>Sort Order</label></th><td><input type="number" v-model.number="form.sort_order" /></td></tr>
-          <tr><th><label>Notes</label></th><td><textarea v-model="form.notes" rows="3"></textarea></td></tr>
-        </tbody></table>
+              <td class="p-4 text-slate-500">
+                <div>{{ item.email }}</div>
+                <div class="text-xs">{{ item.phone }}</div>
+              </td>
+              <td class="p-4">
+                <span class="px-2.5 py-1 rounded-full text-xs font-bold border" :class="statusClass(item.status)">
+                  {{ item.status ? item.status.toUpperCase() : 'PENDING' }}
+                </span>
+              </td>
 
-        <div class="row" style="margin-top:12px;">
-          <button class="button button-primary" :disabled="saving" @click="save">
-            {{ saving ? 'Saving…' : 'Save' }}
-          </button>
-          <button class="button" @click="modalOpen=false">Cancel</button>
+              <td class="p-4">
+                <button @click="openDetail(item.id)" class="group flex items-end gap-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-white border border-slate-200 px-3 py-1.5 rounded-md shadow-sm hover:border-indigo-300 transition-colors">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                  Manage
+                </button>
+              </td>
+
+              <td class="p-4">
+                 <div class="flex items-center gap-2">
+                    <div v-if="isExtensionEnabled(item)" class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <span v-if="item.payment_extension?.status === 'submitted'" class="text-xs font-bold text-emerald-700">Signed</span>
+                        <span v-else class="text-xs text-emerald-600">Active</span>
+                        <button @click="openExtensionModal(item)" class="text-xs text-blue-600 hover:underline px-3 py-1.5 border bottom-1 border-cyan-500 rounded-md shadow-sm">Manage</button>
+                        <button @click="toggleExtension(item.applicant_id, 0, 0)" class="text-xs text-indigo-600 hover:underline px-3 py-1.5">Disable</button>
+                    </div>
+                    <div v-else class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-slate-300"></span>
+                        <span class="text-xs text-slate-400">Inactive</span>
+                        <button @click="toggleExtension(item.applicant_id, 1, 0)" class="text-xs text-indigo-600 hover:underline px-3 py-1.5">Enable</button>
+                    </div>
+                 </div>
+              </td>
+                
+              <td class="p-4 text-right">
+                 <button @click="openMedicalDetail(item.id)" class="group flex items-end gap-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 transition-colors bg-white border border-slate-200 hover:border-indigo-300 ml-auto px-3 py-1.5 rounded-md shadow-sm">
+                    <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    View Record
+                 </button>
+              </td>
+             
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <div v-if="total > perPage" class="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50">
+         <button :disabled="page===1" @click="page--; load()" class="px-3 py-1 bg-white border rounded disabled:opacity-50 text-xs">Previous</button>
+         <span class="text-xs text-slate-500">Page {{ page }}</span>
+         <button :disabled="page * perPage >= total" @click="page++; load()" class="px-3 py-1 bg-white border rounded disabled:opacity-50 text-xs">Next</button>
+      </div>
+    </div>
+
+    <div v-if="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" @click.self="modalOpen=false">
+      <div class="bg-white w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <h3 class="text-lg font-bold text-slate-800">Application Details</h3>
+          <button @click="modalOpen=false" class="text-slate-400 hover:text-slate-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div v-if="notice.show" :class="notice.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'" class="mb-4 p-4 rounded-lg border text-sm font-medium flex items-center gap-2">
+          <span v-if="notice.type==='success'">✓</span><span v-else>⚠️</span>
+          {{ notice.message }}
+        </div>
+        <div class="p-6 overflow-y-auto space-y-6">
+          <div v-if="modalLoading" class="text-center py-10 text-slate-400">Loading details...</div>
+          <div v-else-if="modalItem">
+             <div class="bg-blue-50/50 p-4 rounded-lg border border-blue-100 grid grid-cols-2 gap-4 text-sm">
+                <div><label class="text-xs text-slate-400 uppercase font-bold">Applicant</label><div class="font-semibold text-slate-800">{{ modalItem.name }}</div></div>
+                <div><label class="text-xs text-slate-400 uppercase font-bold">Email</label><div class="text-slate-700">{{ modalItem.email }}</div></div>
+                <div><label class="text-xs text-slate-400 uppercase font-bold">Housing Need</label><div class="text-slate-700">{{ modalItem.need_housing }}</div></div>
+                <div><label class="text-xs text-slate-400 uppercase font-bold">Status</label><div><span class="px-2 py-0.5 rounded-full text-xs font-bold border" :class="statusClass(modalItem.status)">{{ modalItem.status }}</span></div></div>
+             </div>
+             <div v-if="modalItem.rejection_reason" class="bg-red-50 p-3 rounded border border-red-100 text-sm text-red-800"><strong>Reason:</strong> {{ modalItem.rejection_reason }}</div>
+             
+             <div v-if="modalItem.for_rental" class="space-y-2 mt-4">
+                <h4 class="text-sm font-bold text-slate-800 border-b pb-1">Rental Data</h4>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                   <div v-for="(val, key) in modalItem.for_rental" :key="key"><span class="text-slate-400 text-xs block">{{ pretty(key) }}</span><span class="text-slate-700">{{ val || '-' }}</span></div>
+                </div>
+             </div>
+
+             <div v-if="modalItem.for_verification" class="space-y-2 pt-4">
+                <h4 class="text-sm font-bold text-slate-800 border-b pb-1">Verification Data</h4>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                   <div v-for="(val, key) in modalItem.for_verification" :key="key"><span class="text-slate-400 text-xs block">{{ pretty(key) }}</span><span class="text-slate-700">{{ val || '-' }}</span></div>
+                </div>
+             </div>
+
+             <div class="border-t pt-4 mt-6">
+                <label class="block text-sm font-medium text-slate-700 mb-2">Rejection Reason</label>
+                <textarea v-model="modalRejection" rows="2" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
+                <div class="flex justify-end gap-3 mt-4">
+                   <button @click="updateHousingStatus('approved')" :disabled="modalLoading" class="px-4 py-2 bg-emerald-600 text-white rounded text-sm font-semibold hover:bg-emerald-700">Approve</button>
+                   <button @click="updateHousingStatus('rejected')" :disabled="modalLoading" class="px-4 py-2 bg-white border border-red-200 text-red-600 rounded text-sm font-semibold hover:bg-red-50">Reject</button>
+                </div>
+             </div>
+          </div>
         </div>
       </div>
     </div>
+
+    <div v-if="medicalModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" @click.self="medicalModalOpen=false">
+      <div class="bg-white w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        
+        <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
+          <div>
+             <h3 class="text-lg font-bold text-slate-800">Medical Record Review</h3>
+             <p class="text-xs text-slate-500">Review applicant history and clearance documents.</p>
+          </div>
+          <button @click="medicalModalOpen=false" class="text-slate-400 hover:text-slate-600 transition-colors">
+             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <div v-if="modalLoading" class="flex-1 flex flex-col items-center justify-center p-10 text-slate-400">
+            <svg class="animate-spin h-8 w-8 text-indigo-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            <span>Loading data...</span>
+        </div>
+        
+        <div v-else-if="!medicalItem" class="flex-1 flex items-center justify-center p-10">
+           <div class="bg-amber-50 text-amber-700 p-4 rounded-lg border border-amber-200 flex items-center gap-3">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+              No medical affidavit found for this applicant.
+           </div>
+        </div>
+
+        <div v-else class="flex flex-col h-full overflow-hidden bg-slate-50/50">
+           
+           <div v-if="medicalItem.medical_clearance_status === 'approved'" class="bg-emerald-50 border-b border-emerald-100 px-6 py-3 flex items-center justify-between">
+              <div class="flex items-center gap-2 text-emerald-700 font-bold text-sm">
+                 <div class="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>
+                 Medical Clearance Approved
+              </div>
+              <div class="text-xs text-emerald-600">This applicant is cleared to proceed.</div>
+           </div>
+
+           <div v-else-if="medicalItem.medical_clearance_status === 'rejected'" class="bg-red-50 border-b border-red-100 px-6 py-3 flex items-center justify-between">
+              <div class="flex items-center gap-2 text-red-700 font-bold text-sm">
+                 <div class="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></div>
+                 Medical Clearance Rejected
+              </div>
+              <div class="text-xs text-red-600">Applicant must resubmit documents.</div>
+           </div>
+
+           <div v-else-if="medicalItem.has_conditions === 'yes'" class="bg-blue-50 border-b border-blue-100 px-6 py-3 flex items-center justify-between">
+              <div class="flex items-center gap-2 text-blue-700 font-bold text-sm">
+                 <div class="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+                 Pending Review
+              </div>
+              <div class="text-xs text-blue-600">Please review the clearance certificate below.</div>
+           </div>
+
+           <div class="flex border-b border-slate-200 bg-white px-6 shadow-sm">
+              <button @click="activeTab='history'" :class="activeTab==='history' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'" class="px-4 py-3 text-sm font-bold border-b-2 transition-colors">History</button>
+              <button @click="activeTab='clearance'" :class="activeTab==='clearance' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'" class="px-4 py-3 text-sm font-bold border-b-2 transition-colors">Clearance Documents</button>
+           </div>
+
+           <div class="p-6 overflow-y-auto flex-1">
+              
+              <div v-if="activeTab==='history'" class="space-y-6">
+                  
+                  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div class="px-6 py-3 border-b border-slate-200 bg-slate-50">
+                          <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wide">Personal Information</h4>
+                      </div>
+                      <div v-if="medicalItem.details && medicalItem.details.medical_history" class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <template v-for="(ans, question, index) in medicalItem.details.medical_history">
+                              <div v-if="index < 7" :key="question">
+                                  <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">{{ pretty(question) }}</label>
+                                  <div class="text-sm font-medium text-slate-800">{{ ans || '-' }}</div>
+                              </div>
+                          </template>
+                      </div>
+                  </div>
+
+                  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div class="px-6 py-3 border-b border-slate-200 bg-slate-50">
+                          <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wide">Medical Conditions</h4>
+                      </div>
+                      <div v-if="medicalItem.details && medicalItem.details.medical_history">
+                          <table class="w-full text-left text-sm">
+                              <tbody class="divide-y divide-slate-100">
+                                  <template v-for="(ans, question, index) in medicalItem.details.medical_history">
+                                      <tr v-if="index >= 7" :key="question" :class="(ans === 'Yes' || ans === true) ? 'bg-red-50' : ''">
+                                          <td class="px-6 py-3 font-medium text-slate-600">{{ pretty(question) }}</td>
+                                          <td class="px-6 py-3 text-right">
+                                              <span v-if="ans === 'Yes' || ans === true" class="inline-flex items-center gap-1 text-red-700 font-bold text-xs uppercase"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>YES</span>
+                                              <span v-else class="text-slate-400 text-xs uppercase font-medium">No</span>
+                                          </td>
+                                      </tr>
+                                  </template>
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
+              </div>
+
+              <div v-if="activeTab==='clearance'">
+                 <div v-if="medicalItem.has_conditions === 'yes'" class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
+                    <h4 class="text-sm font-bold text-slate-800 mb-4">Clearance Certificate</h4>
+                    
+                    <div v-if="medicalItem.medical_clearance_file" class="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200 mb-6 group hover:border-indigo-300 transition-colors">
+                       <div class="bg-white p-3 rounded-lg text-red-500 shadow-sm group-hover:scale-110 transition-transform">
+                           <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z" /><path d="M3 8a2 2 0 012-2v10h8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" /></svg>
+                       </div>
+                       <div class="flex-1">
+                          <div class="text-sm font-bold text-slate-900">Signed Clearance PDF</div>
+                          <div class="text-xs text-slate-500 mb-1">Uploaded by applicant</div>
+                          <a :href="medicalItem.medical_clearance_file" target="_blank" class="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline">
+                             View Document <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                          </a>
+                       </div>
+                    </div>
+                    <div v-else class="p-6 text-center border-2 border-dashed border-slate-300 rounded-lg bg-slate-50">
+                        <div class="text-slate-400 mb-2">No file uploaded yet</div>
+                        <div class="text-xs text-slate-500">Applicant has declared medical conditions but hasn't uploaded the clearance form.</div>
+                    </div>
+                 </div>
+
+                 <div v-else class="flex flex-col items-center justify-center p-12 text-center bg-white rounded-xl border border-slate-200 shadow-sm h-64">
+                    <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-400">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <h4 class="text-lg font-bold text-slate-800">Clearance Not Required</h4>
+                    <p class="text-sm text-slate-500 max-w-xs mt-2">This applicant has not reported any medical conditions that require a doctor's clearance.</p>
+                 </div>
+              </div>
+           </div>
+
+           <div class="flex border-t border-slate-200 bg-white px-6 py-4 justify-between items-center gap-3">
+                <div class="text-xs text-slate-400">
+                    Last updated: {{ medicalItem.updated_at || medicalItem.created_at || 'Never' }}
+                </div>
+                
+                    <button 
+                        @click="updateMedicalStatus('rejected')" 
+                        :disabled="modalLoading || medicalItem.medical_clearance_status === 'rejected'"
+                        class="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                        Reject
+                    </button>
+                    <button 
+                        @click="updateMedicalStatus('approved')" 
+                        :disabled="modalLoading || medicalItem.medical_clearance_status === 'approved'"
+                        class="px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 shadow-md shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform active:scale-95">
+                        Approve
+                    </button>
+           </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="extensionModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" @click.self="extensionModalOpen=false">
+      <div class="bg-white w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        
+        <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <h3 class="text-lg font-bold text-slate-800">Manage Payment Extension</h3>
+          <button @click="extensionModalOpen=false" class="text-slate-400 hover:text-slate-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+
+        <div v-if="notice.show" :class="notice.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'" class="mb-4 p-4 rounded-lg border text-sm font-medium flex items-center gap-2">
+          <span v-if="notice.type==='success'">✓</span><span v-else>⚠️</span>
+          {{ notice.message }}
+        </div>
+
+        <div class="p-6 overflow-y-auto">
+           <div v-if="extensionModalLoading" class="text-center text-slate-400 py-8">Processing...</div>
+           <div v-else class="space-y-6">
+              <div class="flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
+                <div>
+                    <h4 class="font-bold text-indigo-900">Payment Extension Agreement</h4>
+                    <p class="text-xs text-indigo-600">If its enable it will visible in candidate panel to see <br /> and sign the payment agreement extension form.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button v-if="modalItem.payment_extension?.show_candidate === 1" @click="toggleExtension(modalItem.applicant_id, 1, 1)" class="px-3 py-1.5 bg-lime-500 text-white text-xs font-bold rounded shadow-sm hover:bg-lime-700">Enable</button>
+                    <button v-else @click="toggleExtension(modalItem.applicant_id, 1, 0)" class="px-3 py-1.5 bg-rose-500 text-white text-xs font-bold rounded shadow-sm hover:bg-rose-700">Disable</button>
+                </div>
+              </div>
+
+              <div v-if="modalItem.payment_extension?.status === 'submitted'">
+                  <iframe :src="getDynamicUrl(modalItem.payment_extension?.final_signed_pdf)" class="w-full h-64 border rounded-lg shadow-sm"></iframe>
+              </div>
+              <div v-else>
+                 <h4 class="text-sm font-bold text-slate-700 mb-3 border-b pb-1">Agreement Details</h4>
+                 
+                 <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">First Name</label><input v-model="extensionForm.tenant_first_name" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">Last Name</label><input v-model="extensionForm.tenant_last_name" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                    
+                    <div class="col-span-2"><label class="block text-xs font-bold text-slate-500 mb-1">Rental Address</label><input v-model="extensionForm.rental_address" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                    
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">Phone</label><input v-model="extensionForm.tenant_phone" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">Email</label><input v-model="extensionForm.tenant_email" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                    
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">Original Due Date</label><input type="date" v-model="extensionForm.due_on" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">Extended Until</label><input type="date" :min="nextDay()" v-model="extensionForm.extended_until" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                 </div>
+                 
+                 <div class="mt-4">
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Notes / Internal Comments</label>
+                    <textarea v-model="extensionForm.note" rows="2" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-200 outline-none"></textarea>
+                 </div>
+              </div>
+           </div>
+        </div>
+
+        <div class="p-5 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+           <div class="flex gap-2">
+              <button @click="extensionUpdateStatus(modalItem.id, 'approved')" :disabled="extensionModalLoading" class="px-3 py-1.5 border border-emerald-300 text-emerald-700 bg-emerald-50 rounded text-xs font-bold hover:bg-emerald-100">Approve</button>
+              <button @click="extensionUpdateStatus(modalItem.id, 'rejected')" :disabled="extensionModalLoading" class="px-3 py-1.5 border border-red-300 text-red-700 bg-red-50 rounded text-xs font-bold hover:bg-red-100">Reject</button>
+           </div>
+           <div class="flex gap-3">
+              <button @click="extensionModalOpen=false" class="px-4 py-2 border border-slate-300 rounded text-sm font-medium hover:bg-white text-slate-600">Close</button>
+              <button @click="saveExtensionForApplicant(modalItem.applicant_id)" :disabled="extensionModalLoading" class="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-medium hover:bg-indigo-700 shadow">Save & Send Agreement</button>
+           </div>
+        </div>
+
+      </div>
+    </div>
+
   </div>
   `
 });
@@ -38294,18 +38685,6 @@ __webpack_require__.r(__webpack_exports__);
   `
 });
 
-/***/ }),
-
-/***/ "./index.scss":
-/*!********************!*\
-  !*** ./index.scss ***!
-  \********************/
-/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
-
-__webpack_require__.r(__webpack_exports__);
-// extracted by mini-css-extract-plugin
-
-
 /***/ })
 
 /******/ 	});
@@ -38380,11 +38759,11 @@ var __webpack_exports__ = {};
 // This entry needs to be wrapped in an IIFE because it needs to be isolated against other modules in the chunk.
 (() => {
 /*!******************!*\
-  !*** ./index.js ***!
+  !*** ./admin.js ***!
   \******************/
 __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var vue_dist_vue_esm_bundler_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue/dist/vue.esm-bundler.js */ "../../node_modules/.pnpm/vue@3.5.22_typescript@5.9.3/node_modules/vue/dist/vue.esm-bundler.js");
-/* harmony import */ var _index_scss__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./index.scss */ "./index.scss");
+/* harmony import */ var _admin_scss__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./admin.scss */ "./admin.scss");
 /* harmony import */ var _components_Dashboard_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./components/Dashboard.js */ "./components/Dashboard.js");
 /* harmony import */ var _components_SettingsPage_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./components/SettingsPage.js */ "./components/SettingsPage.js");
 /* harmony import */ var _components_ApplicantsWithComposite_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./components/ApplicantsWithComposite.js */ "./components/ApplicantsWithComposite.js");
@@ -38392,8 +38771,6 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _components_CoursesList_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./components/CoursesList.js */ "./components/CoursesList.js");
 /* harmony import */ var _components_HousingList_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./components/HousingList.js */ "./components/HousingList.js");
 /* harmony import */ var _components_LogsList_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! ./components/LogsList.js */ "./components/LogsList.js");
-/* harmony import */ var _components_FeedbackList_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! ./components/FeedbackList.js */ "./components/FeedbackList.js");
-
 
 
 
@@ -38410,14 +38787,13 @@ const InfoPage = {
 			<p>Use these shortcodes in pages/posts:</p>
 			<ul>
 				<li><code>[jamrock_learndash_dashboard]</code> — renders the jamrock_learndash_dashboard</li>
-				<li><code>[jamrock_form]</code> — renders the feedback form</li>
-				<li><code>[jamrock_results]</code> — list results (admins only)</li>
+        <li><code>.. coming soon</li>
 			</ul>
 			<p>Blocks are also available in the editor: <strong>Feedback Form</strong> and <strong>Feedback Result</strong>.</p>
 		</div>
 	`
 };
-const allowedTabs = ["dashboard", "settings", "courses", "housing", "applicantswithcomposite", "assessments", "feedback", "logs", "info"];
+const allowedTabs = ["dashboard", "settings", "courses", "housing", "applicantswithcomposite", "assessments", "logs", "info"];
 function readTabFromUrl() {
   const u = new URL(window.location.href);
   const v = u.searchParams.get('view');
@@ -38433,10 +38809,9 @@ const App = {
     Dashboard: _components_Dashboard_js__WEBPACK_IMPORTED_MODULE_2__["default"],
     SettingsPage: _components_SettingsPage_js__WEBPACK_IMPORTED_MODULE_3__["default"],
     CoursesList: _components_CoursesList_js__WEBPACK_IMPORTED_MODULE_6__["default"],
+    HousingList: _components_HousingList_js__WEBPACK_IMPORTED_MODULE_7__["default"],
     ApplicantsWithComposite: _components_ApplicantsWithComposite_js__WEBPACK_IMPORTED_MODULE_4__["default"],
     AssessmentsList: _components_AssessmentsList_js__WEBPACK_IMPORTED_MODULE_5__["default"],
-    HousingList: _components_HousingList_js__WEBPACK_IMPORTED_MODULE_7__["default"],
-    FeedbackList: _components_FeedbackList_js__WEBPACK_IMPORTED_MODULE_9__["default"],
     LogsList: _components_LogsList_js__WEBPACK_IMPORTED_MODULE_8__["default"],
     InfoPage
   },
@@ -38478,8 +38853,7 @@ const App = {
         <button :class="['nav-tab', {'nav-tab-active': tab==='courses'}]"     @click.prevent="setTab('courses')">Courses</button>
         <button :class="['nav-tab', {'nav-tab-active': tab==='applicantswithcomposite'}]" @click.prevent="setTab('applicantswithcomposite')">Applicants</button>
         <button :class="['nav-tab', {'nav-tab-active': tab==='assessments'}]"  @click.prevent="setTab('assessments')">Assessments</button>
-		    <button :class="['nav-tab', {'nav-tab-active': tab==='housing'}]"     @click.prevent="setTab('housing')">Housing</button>
-        <button :class="['nav-tab', {'nav-tab-active': tab==='feedback'}]"    @click.prevent="setTab('feedback')">Feedback</button>
+        <button :class="['nav-tab', {'nav-tab-active': tab==='housing'}]"  @click.prevent="setTab('housing')">Housing/Rental</button>
 		    <button :class="['nav-tab', {'nav-tab-active': tab==='logs'}]"        @click.prevent="setTab('logs')">Logs</button>
         <button :class="['nav-tab', {'nav-tab-active': tab==='info'}]"        @click.prevent="setTab('info')">Info</button>
       </h2>
@@ -38487,10 +38861,9 @@ const App = {
       <Dashboard       v-if="tab==='dashboard'" />
       <SettingsPage    v-else-if="tab==='settings'" />
       <CoursesList     v-else-if="tab==='courses'" />
-      <HousingList     v-else-if="tab==='housing'" />
       <ApplicantsWithComposite  v-else-if="tab==='applicantswithcomposite'" />
       <AssessmentsList v-else-if="tab==='assessments'" />
-      <FeedbackList    v-else-if="tab==='feedback'" />
+      <HousingList v-else-if="tab==='housing'" />
       <LogsList        v-else-if="tab==='logs'" />
       <InfoPage        v-else />
     </div>

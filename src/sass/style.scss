@@ -1,4 +1,8 @@
-// Tokens
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 $base__color: rgb(0, 0, 0);
 $btn__color: rgb(0, 0, 0);
 $accent__color: #E8A674; // extracted from repeated hex
@@ -29,6 +33,25 @@ $accent__color: #E8A674; // extracted from repeated hex
     margin-top: 5px;
 }
 
+.bg-red {
+    background-color: red;
+}
+
+.bg-error, .bg-warning {
+    background-color: red;
+}
+
+.bg-success {
+    background-color: rgb(20, 217, 109);
+}
+
+.bg-white {
+    background-color: rgb(255, 255, 255);
+}
+
+.color-white {
+    color: white;
+}
 
 .jrj-hidden {
     display: none !important;
@@ -36,6 +59,14 @@ $accent__color: #E8A674; // extracted from repeated hex
 
 .jrj-list {
     margin: 10px 0 0 18px;
+}
+
+.jrj-signature-pad canvas {
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: crosshair;
+    background: transparent;
 }
 
 /* progress bar controlled by a CSS variable set inline */
@@ -86,13 +117,37 @@ $accent__color: #E8A674; // extracted from repeated hex
     padding: 22px;
     transition: transform .2s ease, box-shadow .2s ease;
 
+    .jrj-block {
+        margin-top: 10px;
+    }
+    .widefat {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+    
     &:hover {
         transform: translateY(-4px);
         box-shadow: 0 14px 30px rgba(0, 0, 0, .09);
     }
 
+    .notice.notice-error, .notice-warning {
+        color: #db3f0f;
+    }
+
+    .notice.notice-success {
+        color: #0fdb0f;
+    }
+
     h3 {
-        font-size: 18px;
+        font-size: 26px;
+        text-transform: uppercase;
+        font-weight: bold;
+    }
+
+    h4 {
+        font-size: 22px;
     }
 }
 
@@ -146,7 +201,7 @@ $accent__color: #E8A674; // extracted from repeated hex
     border-radius: 999px;
     background: #ececec;
     overflow: hidden;
-
+    
     >span {
         display: block;
         height: 100%;
@@ -185,6 +240,179 @@ $accent__color: #E8A674; // extracted from repeated hex
     color: #666;
 }
 
+.pdf-app-container {
+    display: flex;
+    height: 600px;
+    font-family: sans-serif;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: white;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Sidebar */
+.pdf-sidebar {
+    width: 300px;
+    background-color: #f8fafc;
+    border-right: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+}
+
+.pdf-header {
+    padding: 1rem;
+    background: white;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.pdf-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #334155;
+    font-weight: bold;
+}
+
+.pdf-header small {
+    color: #94a3b8;
+    font-size: 0.75rem;
+}
+
+/* List Area */
+.pdf-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem;
+}
+
+.pdf-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.pdf-list-item {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    color: #475569;
+    border-bottom: 1px solid #f1f5f9;
+    background: white;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s;
+}
+
+.pdf-list-item:hover {
+    background-color: #eff6ff;
+}
+
+.pdf-val-preview {
+    color: #3b82f6;
+    opacity: 0.8;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Footer */
+.pdf-footer {
+    padding: 1rem;
+    border-top: 1px solid #e2e8f0;
+    background: white;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pdf-btn {
+    width: 100%;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pdf-btn-white {
+    background: white;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+}
+
+.pdf-btn-white:hover {
+    background: #f1f5f9;
+}
+
+.pdf-btn-blue {
+    background: #2563eb;
+    border: none;
+    color: white;
+}
+
+.pdf-btn-blue:hover {
+    background: #1d4ed8;
+}
+
+.pdf-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Main Area */
+.pdf-main {
+    flex: 1;
+    background-color: #f1f5f9;
+    position: relative;
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.pdf-wrapper {
+    position: relative;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    background: white;
+}
+
+.pdf-canvas {
+    display: block;
+    border-radius: 2px;
+}
+
+/* Inputs */
+.pdf-input-overlay {
+    position: absolute;
+    background: rgba(37, 99, 235, 0.1);
+    border: 1px solid rgba(37, 99, 235, 0.3);
+    box-sizing: border-box;
+    font-size: 12px;
+    padding: 2px;
+}
+
+.pdf-input-overlay:focus {
+    background: white;
+    outline: 2px solid #2563eb;
+    z-index: 20;
+}
+
+.pdf-textarea {
+    resize: none;
+}
+
+input[name="abdominal_pains"][value="Value_mxpo"] {
+    left: 760px !important;
+}
+
 /* ------------------ Grid Controls ------------------ */
 .jrj-grid-controls {
     display: flex;
@@ -210,7 +438,7 @@ $accent__color: #E8A674; // extracted from repeated hex
     color: #555;
     font-weight: 400;
     font-size: 14px;
-
+    
     &.active {
         border-color: #eebc97;
         background: $accent__color;
@@ -229,7 +457,7 @@ $accent__color: #E8A674; // extracted from repeated hex
     border: 1px solid #eee;
     border-radius: 10px;
     padding: 3px 14px;
-
+    
     input {
         border: 0;
         outline: none;
@@ -443,12 +671,12 @@ $accent__color: #E8A674; // extracted from repeated hex
 }
 
 .jrj-announce {
-.jrj-list {
+    .jrj-list {
         list-style: none;
         margin: 0;
         padding: 0;
     }
-
+    
     .jrj-card {
         display: flex;
         align-items: center;
@@ -459,49 +687,49 @@ $accent__color: #E8A674; // extracted from repeated hex
         margin: 10px 0;
         box-shadow: 0 2px 10px rgba(0, 0, 0, .03);
     }
-
+    
     .jrj-lead {
         font-weight: 800;
     }
-
+    
     .jrj-text {
         color: #111;
     }
-
+    
     .jrj-when {
         color: #9aa0a6;
         margin-left: 6px;
     }
-
+    
     .jrj-link {
         margin-left: auto;
         text-decoration: none;
         font-weight: 600;
     }
-
+    
     .jrj-type-policy .jrj-lead {
         color: #1a73e8;
     }
-
+    
     .jrj-type-new_course .jrj-lead {
         color: #188038;
     }
-
+    
     .jrj-type-ai_update .jrj-lead {
         color: #a142f4;
     }
-
+    
     .jrj-type-expiry .jrj-lead {
         color: #d93025;
     }
-
+    
     .jrj-empty,
     .jrj-error,
     .jrj-list.loading {
         color: #666;
         padding: 10px 0;
     }
-
+    
 }
 
 .jrj-step {
@@ -565,7 +793,7 @@ iframe.jrj-psym {
 .jamrock-feedback-section {
     box-shadow: 0 0 20px 6px #cccccc3b;
     padding: 30px 15px;
-
+    
     h2 {
         font-size: 26px;
         text-align: center;
@@ -587,7 +815,7 @@ iframe.jrj-psym {
 
 .jamrock-feedback-results {
     font-size: 16px;
-
+    
     h2 {
         font-size: 2.6em;
         font-weight: 900;
@@ -605,7 +833,7 @@ iframe.jrj-psym {
     padding: 5px 15px;
     color: #fff;
     font-weight: bold;
-
+    
     li {
         width: 25%;
         min-width: 100px;
@@ -616,11 +844,11 @@ iframe.jrj-psym {
     background: #e9d2ff42;
     font-size: 14px;
     padding: 5px 15px;
-
+    
     &:nth-child(even) {
         background: #fafafa;
     }
-
+    
     li {
         width: 25%;
         min-width: 100px;
@@ -647,7 +875,7 @@ iframe.jrj-psym {
     li {
         line-height: 2.3;
         font-size: 16px;
-
+        
         span {
             width: 100px;
             display: inline-block;
@@ -660,7 +888,7 @@ iframe.jrj-psym {
     margin-top: 40px;
     display: flex;
     justify-content: center;
-
+    
     a,
     span {
         padding: 4px 15px;
@@ -670,7 +898,7 @@ iframe.jrj-psym {
         text-decoration: none;
         margin: 5px;
     }
-
+    
     .page-numbers.current {
         background: #ad0606;
     }

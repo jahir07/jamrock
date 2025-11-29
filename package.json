@@ -3,16 +3,19 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "npm run build:blocks && npm run build:frontend && npm run build:admin",
-    "build:blocks": "cd src/blocks && wp-scripts build ./index.js --output-path=../../assets/blocks",
+    "build": "npm run build:frontend && npm run build:admin && npm run build:css",
     "build:frontend": "cd src/frontend && wp-scripts build ./custom.js ./autoproctor.js --output-path=../../assets/js",
-    "build:admin": "cd src/admin && wp-scripts build ./index.js --output-filename=admin.js --output-path=../../assets/admin",
-    "build:css": "sass src/sass:assets/css src/admin:assets/admin --style=compressed --quiet-deps --no-error-css",
-    "start": "run-p watch:blocks watch:frontend watch:admin watch:css",
-    "watch:blocks": "cd src/blocks && wp-scripts start ./index.js --output-path=../../assets/blocks",
+    "build:admin": "cd src/admin && wp-scripts build ./admin.js --output-filename=admin.js --output-path=../../assets/admin",
+    "build:css": "run-s build:css:sass build:css:postcss",
+    "build:css:sass": "sass src/sass:assets/css src/admin/admin.scss:assets/admin/admin.raw.css --style=compressed --quiet-deps --no-error-css",
+    "build:css:postcss": "postcss assets/css/*.css assets/admin/admin.raw.css --dir assets --base assets --replace",
+    "start": "npm run build:css:sass && run-p watch:frontend watch:admin watch:sass:frontend watch:sass:admin watch:postcss:frontend watch:postcss:admin",
     "watch:frontend": "cd src/frontend && wp-scripts start ./custom.js ./autoproctor.js --output-path=../../assets/js",
-    "watch:admin": "cd src/admin && wp-scripts start ./index.js --output-filename=admin.js --output-path=../../assets/admin",
-    "watch:css": "sass src/sass:assets/css src/admin:assets/admin --source-map --style=expanded --quiet-deps --no-error-css -w",
+    "watch:admin": "cd src/admin && wp-scripts start ./admin.js --output-filename=admin.js --output-path=../../assets/admin",
+    "watch:sass:frontend": "sass src/sass/style.scss assets/css/style.raw.css --watch --style=expanded --no-source-map",
+    "watch:sass:admin": "sass src/admin/admin.scss assets/admin/admin.raw.css --watch --style=expanded --no-source-map",
+    "watch:postcss:frontend": "postcss assets/css/style.raw.css -o assets/css/style.css --watch",
+    "watch:postcss:admin": "postcss assets/admin/admin.raw.css -o assets/admin/admin.css --watch",
     "check-engines": "wp-scripts check-engines",
     "check-licenses": "wp-scripts check-licenses",
     "format": "wp-scripts format",
@@ -22,10 +25,14 @@
   },
   "devDependencies": {
     "@wordpress/scripts": "^24.4.0",
+    "autoprefixer": "^10.4.22",
     "npm-run-all": "^4.1.5",
+    "postcss": "^8.5.6",
+    "postcss-cli": "^11.0.1",
     "sass": "^1.93.2",
     "stylelint": "^16.24.0",
     "stylelint-config-wordpress": "^17.0.0",
+    "tailwindcss": "3.4.17",
     "vue": "^3.5.22"
   },
   "browserslist": [
@@ -37,7 +44,11 @@
   },
   "packageManager": "pnpm@10.22.0",
   "dependencies": {
+    "@selemondev/vue3-signature-pad": "^1.6.3",
     "chart.js": "^4.5.1",
+    "file-saver": "^2.0.5",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^5.4.394",
     "vue-chartjs": "^5.3.3"
   }
 }

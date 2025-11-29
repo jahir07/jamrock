@@ -1,1 +1,137 @@
-!function(){if(!JRJ_AP.enabled)return;const t=JRJ_AP.clientId,e=JRJ_AP.secret||null,o=JRJ_AP.testAttemptId&&String(JRJ_AP.testAttemptId).trim()+Math.random().toString(36).slice(2,7)||Math.random().toString(36).slice(2,10),n=e?function(t,e){const o=CryptoJS.enc.Utf8.parse(e),n=CryptoJS.enc.Utf8.parse(t),i=CryptoJS.HmacSHA256(n,o);return CryptoJS.enc.Base64.stringify(i)}(o,e):null,i={clientId:t,testAttemptId:o,hashedTestAttemptId:n},a=JRJ_AP.opts||{};console.log(a);let s=null,r=!1,c=!1;async function l(){if(!r){r=!0,console.log("[JRJ AP] Initializing AutoProctor…");try{s=new AutoProctor(i),window.__ap=s,await s.setup(a),await s.start(),console.log("[JRJ AP] Monitoring started."),window.addEventListener("apMonitoringStarted",()=>{document.getElementById("ap-test-proctoring-status").innerHTML="Proctoring..."})}catch(t){console.error("[JRJ AP] Failed to initialize AutoProctor",t)}}}function d(t={},e="started"){const n={quiz_id:JRJ_AP.quizId||0,attempt_id:o,event:e,payload:t,user:{name:JRJ_AP.userName,email:JRJ_AP.email}};fetch(JRJ_AP.root+"autoproctor/attempts",{method:"POST",credentials:"same-origin",headers:{"X-WP-Nonce":JRJ_AP.nonce,"Content-Type":"application/json"},body:JSON.stringify(n),keepalive:!0}).then(t=>t.text().then(e=>console.log("ap attempt ->",t.status,e)))}fetch(JRJ_AP.root+"autoproctor/attempts",{method:"POST",credentials:"same-origin",headers:{"X-WP-Nonce":JRJ_AP&&JRJ_AP.nonce?JRJ_AP.nonce:"","Content-Type":"application/json"},body:JSON.stringify({quiz_id:299,attempt_id:"299yca4k",event:"started",payload:{note:"manual test"},user:{name:"Test User",email:"test@example.com"}}),keepalive:!0}).then(async t=>{console.log("status",t.status),console.log(await t.text())}),document.addEventListener("click",t=>{t.target.closest('.wpProQuiz_button[name="startQuiz"], .wpProQuiz_button[name="restartQuiz"], .ld-quiz-start, .quiz_continue_link')&&l()},{capture:!0}),document.addEventListener("click",t=>{t.target.closest('#quiz_continue_link, .wpProQuiz_button[value="Finish Quiz"], .wpProQuiz_button[name="endQuizSummary"], .ld-quiz-submit, .ld-quiz-finish')&&(console.log("stop test"),async function(){if(!c){c=!0,console.log("inst stop test1");try{await s.stop(),console.log("inst stop test2"),window.addEventListener("apMonitoringStopped",async()=>{const t={groupReportsIntoTabs:!0,userDetails:{name:JRJ_AP.userName||"Test User",email:JRJ_AP.email||"test@test.com"}};s.showReport(t),document.getElementById("ap-test-proctoring-status").innerHTML="Proctoring stopped"})}catch(t){console.warn("[JRJ AP] stop error",t)}finally{d({event:"stopped"})}}}())},{capture:!0}),window.addEventListener("load",()=>{JRJ_AP.autoStart&&l()}),window.addEventListener("apViolation",t=>{d({event:"violation",detail:t.detail||{}})})}();
+/******/ (() => { // webpackBootstrap
+/*!************************!*\
+  !*** ./autoproctor.js ***!
+  \************************/
+(function () {
+  //   if (!window.AutoProctor || !window.JRJ_AP) return;
+  if (!JRJ_AP.enabled) return;
+  const CLIENT_ID = JRJ_AP.clientId;
+  const CLIENT_SECRET = JRJ_AP.secret || null;
+
+  // --- helpers: generate ID & HMAC(Base64) ---
+  const getTestAttemptId = () => JRJ_AP.testAttemptId && String(JRJ_AP.testAttemptId).trim() + Math.random().toString(36).slice(2, 7) || Math.random().toString(36).slice(2, 10);
+  function hmacBase64(msg, secret) {
+    const secretWordArray = CryptoJS.enc.Utf8.parse(secret);
+    const messageWordArray = CryptoJS.enc.Utf8.parse(msg);
+    const hash = CryptoJS.HmacSHA256(messageWordArray, secretWordArray);
+    return CryptoJS.enc.Base64.stringify(hash);
+  }
+  const testAttemptId = getTestAttemptId();
+  const hashedTestAttemptId = CLIENT_SECRET ? hmacBase64(testAttemptId, CLIENT_SECRET) : null;
+  const credentials = {
+    clientId: CLIENT_ID,
+    testAttemptId,
+    hashedTestAttemptId
+  };
+  const opts = JRJ_AP.opts || {};
+  const getReportOptions = () => {
+    return {
+      groupReportsIntoTabs: true,
+      userDetails: {
+        name: JRJ_AP.userName || "",
+        email: JRJ_AP.email || ""
+      }
+    };
+  };
+  console.log(opts);
+  let apInstance = null;
+  let started = false;
+  let stopped = false;
+  async function startProctoring() {
+    if (started) return;
+    started = true;
+    console.log("[JRJ AP] Initializing AutoProctor…");
+    try {
+      apInstance = new AutoProctor(credentials);
+      window.__ap = apInstance; // for debugging
+      await apInstance.setup(opts);
+      await apInstance.start(); // start monitoring
+      console.log("[JRJ AP] Monitoring started.");
+      window.addEventListener("apMonitoringStarted", () => {
+        document.getElementById("ap-test-proctoring-status").innerHTML = "Proctoring...";
+      });
+    } catch (err) {
+      console.error("[JRJ AP] Failed to initialize AutoProctor", err);
+    }
+  }
+  async function stopProctoring() {
+    if (stopped) return;
+    stopped = true;
+    try {
+      await apInstance.stop();
+      window.addEventListener("apMonitoringStopped", async () => {
+        const reportOptions = getReportOptions();
+        apInstance.showReport(reportOptions);
+        document.getElementById("ap-test-proctoring-status").innerHTML = "Proctoring stopped";
+      });
+    } catch (e) {
+      console.warn("[JRJ AP] stop error", e);
+    } finally {
+      safeFetchLog({
+        event: "stopped"
+      });
+    }
+  }
+
+  // -- safe fetch log ---
+  function safeFetchLog(payload = {}, event = "started") {
+    const body = {
+      quiz_id: JRJ_AP.quizId || 0,
+      attempt_id: testAttemptId,
+      // MUST be defined
+      event,
+      payload,
+      user: {
+        name: JRJ_AP.userName,
+        email: JRJ_AP.email
+      }
+    };
+    fetch(JRJ_AP.root + "autoproctor/attempts", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "X-WP-Nonce": JRJ_AP.nonce,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body),
+      keepalive: true
+    }).then(r => r.text().then(t => console.log("ap attempt ->", r.status, t)));
+  }
+
+  // --- Start triggers (LD start/continue buttons) ---
+  document.addEventListener("click", e => {
+    const btn = e.target.closest('.wpProQuiz_button[name="startQuiz"], .wpProQuiz_button[name="restartQuiz"], .ld-quiz-start, .quiz_continue_link');
+    if (!btn) return;
+    startProctoring();
+  }, {
+    capture: true
+  });
+
+  // --- Stop trigger #1: click on Finish/Submit buttons ---
+  document.addEventListener("click", e => {
+    const finishBtn = e.target.closest('#quiz_continue_link, .wpProQuiz_button[value="Finish Quiz"], .wpProQuiz_button[name="endQuizSummary"], .ld-quiz-submit, .ld-quiz-finish');
+    if (!finishBtn) return;
+    console.log("stop test");
+    stopProctoring();
+    // small delay to let LD process submit
+    // setTimeout(() => stopProctoring(), 1500);
+  }, {
+    capture: true
+  });
+
+  // Auto start if configured
+  window.addEventListener("load", () => {
+    if (JRJ_AP.autoStart) startProctoring();
+  });
+
+  // Violation relay (optional)
+  window.addEventListener("apViolation", e => {
+    safeFetchLog({
+      event: "violation",
+      detail: e.detail || {}
+    });
+  });
+})();
+/******/ })()
+;
+//# sourceMappingURL=autoproctor.js.map

@@ -12,6 +12,8 @@ namespace Jamrock\Controllers;
 
 defined( 'ABSPATH' ) || exit;
 
+use LearnDash\Core\Utilities\Cast;
+
 /**
  * Class Applicants
  *
@@ -26,6 +28,7 @@ class Applicants {
 	 */
 	public function hooks(): void {
 		add_action( 'rest_api_init', array( $this, 'routes' ) );
+		add_shortcode( 'jrj_candidate_profile', array( $this, 'candidate_profile' ) );
 	}
 
 	/**
@@ -34,6 +37,7 @@ class Applicants {
 	 * @return void
 	 */
 	public function routes(): void {
+
 		register_rest_route(
 			'jamrock/v1',
 			'/applicants',
@@ -43,6 +47,172 @@ class Applicants {
 					return current_user_can( 'manage_options' );
 				},
 				'callback'            => array( $this, 'list' ),
+			)
+		);
+
+		register_rest_route(
+			'jamrock/v1',
+			'/profile/(?P<id>[\w-]+)',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return is_user_logged_in();
+				},
+				'callback'            => array( $this, 'profile_info' ),
+			)
+		);
+	}
+
+	/**
+	 * Shortcode of candidate profile page.
+	 *
+	 * @param mixed $atts
+	 * @return string
+	 */
+	public function candidate_profile( $atts ) {
+		if ( ! is_user_logged_in() ) {
+			return '<p>Please log in to see your profile.</p>';
+		}
+		wp_enqueue_style( 'jamrock-frontend' );
+		return '<div id="jrj-candidate-profile" data-user-id="' . esc_attr( get_current_user_id() ) . '"></div>';
+	}
+
+	/**
+	 * Get profile_info by id.
+	 *
+	 * @param \WP_REST_Request $req request.
+	 * @return \WP_Error|\WP_REST_Response
+	 */
+	public function profile_info( \WP_REST_Request $req ) {
+
+		$id = $req->get_param( 'id' );
+
+		// allow 'me'
+		if ( $id === 'me' ) {
+			$user = wp_get_current_user();
+		} else {
+			$user = get_userdata( intval( $id ) );
+		}
+
+		if ( ! $user || ! $user->ID ) {
+			return rest_ensure_response(
+				array(
+					'ok'    => false,
+					'error' => 'not_found',
+				),
+				404
+			);
+		}
+
+		$user_id = (int) $user->ID;
+
+		$courses = array();
+		if ( function_exists( 'learndash_user_get_enrolled_courses' ) ) {
+			$enrolled = (array) learndash_user_get_enrolled_courses( $user_id ); // array of course IDs
+		} else {
+			// fallback: no helper — try user meta common keys
+			$maybe    = get_user_meta( $user_id, 'ld_enrolled_courses', true );
+			$enrolled = is_array( $maybe ) ? $maybe : array();
+		}
+
+		foreach ( $enrolled as $course_id ) {
+			$course_id = (int) $course_id;
+			$post      = get_post( $course_id );
+			if ( ! $post || $post->post_type !== 'sfwd-courses' ) {
+				continue;
+			}
+
+			$title     = get_the_title( $course_id );
+			$permalink = get_permalink( $course_id );
+
+			// progress percent: try common LearnDash helpers
+			$progress_percent = null;
+			if ( function_exists( 'learndash_course_progress' ) ) {
+				$p = learndash_course_progress(
+					array(
+						'user_id'   => $user_id,
+						'course_id' => $course_id,
+						'array'     => true,
+					)
+				);
+				if ( is_array( $p ) ) {
+					if ( isset( $p['percentage'] ) ) {
+						$progress_percent = (float) $p['percentage'];
+					}
+					if ( isset( $p['completed'], $p['total'] ) && (int) $p['total'] > 0 ) {
+						$progress_percent = round( ( (int) $p['completed'] / (int) $p['total'] ) * 100, 2 );
+					}
+				}
+			}
+
+			// ensure numeric and clamp 0..100
+			$progress_percent = is_null( $progress_percent ) ? 0.0 : max( 0.0, min( 100.0, (float) $progress_percent ) );
+
+			// completed detection
+			$completed = false;
+			if ( function_exists( 'learndash_course_completed' ) ) {
+				$completed = (bool) learndash_course_completed( $user_id, $course_id );
+			} elseif ( $progress_percent >= 99.9 ) {
+				$completed = true;
+			}
+
+			// certificate url (best-effort)
+			$certificate_url = null;
+			if ( function_exists( 'learndash_get_certificate_count' ) ) {
+				// some sites return certificate post or URL
+				$cert = learndash_get_certificate_count( $user_id );
+				if ( is_string( $cert ) && filter_var( $cert, FILTER_VALIDATE_URL ) ) {
+					$certificate_url = $cert;
+				} elseif ( is_array( $cert ) && ! empty( $cert['certificate_url'] ) ) {
+					$certificate_url = $cert['certificate_url'];
+				}
+			} else {
+				// try meta or attachment lookups (site-specific)
+				$cmeta = get_user_meta( $user_id, "certificate_{$course_id}", true );
+				if ( is_string( $cmeta ) && filter_var( $cmeta, FILTER_VALIDATE_URL ) ) {
+					$certificate_url = $cmeta;
+				}
+			}
+
+			$courses[] = array(
+				'id'               => $course_id,
+				'title'            => $title,
+				'permalink'        => $permalink,
+				'progress_percent' => $progress_percent,
+				'status'           => $completed ? 'completed' : 'in_progress',
+				'certificate_url'  => $certificate_url,
+			);
+		}
+
+		// Build profile payload (existing fields + courses)
+		$profile = array(
+			'id'                 => $user->ID,
+			'display_name'       => $user->display_name,
+			'email'              => $user->user_email,
+			'avatar'             => get_avatar_url( $user->ID ),
+			'courses_count'      => count( $courses ),
+			'completed_count'    => count(
+				array_filter(
+					$courses,
+					function ( $c ) {
+						return ( $c['status'] === 'completed' ); }
+				)
+			),
+			'certificates_count' => count(
+				array_filter(
+					$courses,
+					function ( $c ) {
+						return ! empty( $c['certificate_url'] ); }
+				)
+			),
+			'points'             => (int) get_user_meta( $user->ID, 'jrj_points', true ), // adjust if you have different points system
+			'courses'            => $courses,
+		);
+
+		return rest_ensure_response(
+			array(
+				'ok'      => true,
+				'profile' => $profile,
 			)
 		);
 	}

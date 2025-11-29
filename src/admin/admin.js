@@ -4,16 +4,16 @@ import {
 	onMounted,
 	onBeforeUnmount,
 } from 'vue/dist/vue.esm-bundler.js';
-import './index.scss';
+
+import './admin.scss';
 
 import Dashboard from './components/Dashboard.js';
 import SettingsPage from "./components/SettingsPage.js";
 import ApplicantsWithComposite from "./components/ApplicantsWithComposite.js";
 import AssessmentsList from './components/AssessmentsList.js';
 import CoursesList from './components/CoursesList.js';
-import HousingList from './components/HousingList.js';
+import HousingList from "./components/HousingList.js";
 import LogsList from './components/LogsList.js';
-import FeedbackList from './components/FeedbackList.js';
 
 
 const InfoPage = {
@@ -23,8 +23,7 @@ const InfoPage = {
 			<p>Use these shortcodes in pages/posts:</p>
 			<ul>
 				<li><code>[jamrock_learndash_dashboard]</code> — renders the jamrock_learndash_dashboard</li>
-				<li><code>[jamrock_form]</code> — renders the feedback form</li>
-				<li><code>[jamrock_results]</code> — list results (admins only)</li>
+        <li><code>.. coming soon</li>
 			</ul>
 			<p>Blocks are also available in the editor: <strong>Feedback Form</strong> and <strong>Feedback Result</strong>.</p>
 		</div>
@@ -38,7 +37,6 @@ const allowedTabs = [
   "housing",
   "applicantswithcomposite",
   "assessments",
-  "feedback",
   "logs",
   "info",
 ];
@@ -60,10 +58,9 @@ const App = {
     Dashboard,
     SettingsPage,
     CoursesList,
+    HousingList,
     ApplicantsWithComposite,
     AssessmentsList,
-    HousingList,
-    FeedbackList,
     LogsList,
     InfoPage,
   },
@@ -111,8 +108,7 @@ const App = {
         <button :class="['nav-tab', {'nav-tab-active': tab==='courses'}]"     @click.prevent="setTab('courses')">Courses</button>
         <button :class="['nav-tab', {'nav-tab-active': tab==='applicantswithcomposite'}]" @click.prevent="setTab('applicantswithcomposite')">Applicants</button>
         <button :class="['nav-tab', {'nav-tab-active': tab==='assessments'}]"  @click.prevent="setTab('assessments')">Assessments</button>
-		    <button :class="['nav-tab', {'nav-tab-active': tab==='housing'}]"     @click.prevent="setTab('housing')">Housing</button>
-        <button :class="['nav-tab', {'nav-tab-active': tab==='feedback'}]"    @click.prevent="setTab('feedback')">Feedback</button>
+        <button :class="['nav-tab', {'nav-tab-active': tab==='housing'}]"  @click.prevent="setTab('housing')">Housing/Rental</button>
 		    <button :class="['nav-tab', {'nav-tab-active': tab==='logs'}]"        @click.prevent="setTab('logs')">Logs</button>
         <button :class="['nav-tab', {'nav-tab-active': tab==='info'}]"        @click.prevent="setTab('info')">Info</button>
       </h2>
@@ -120,10 +116,9 @@ const App = {
       <Dashboard       v-if="tab==='dashboard'" />
       <SettingsPage    v-else-if="tab==='settings'" />
       <CoursesList     v-else-if="tab==='courses'" />
-      <HousingList     v-else-if="tab==='housing'" />
       <ApplicantsWithComposite  v-else-if="tab==='applicantswithcomposite'" />
       <AssessmentsList v-else-if="tab==='assessments'" />
-      <FeedbackList    v-else-if="tab==='feedback'" />
+      <HousingList v-else-if="tab==='housing'" />
       <LogsList        v-else-if="tab==='logs'" />
       <InfoPage        v-else />
     </div>

@@ -1,3 +1,7 @@
 import "./includes/Dashboard.js";
 import "./includes/Insights.js";
-import "./includes/Feedback.js";
+
+// profile
+import "./profile/CandidateProfile.js";
+import "./profile/HousingApplicationForm.js";
+import "./profile/MedicalAffidavit.js";

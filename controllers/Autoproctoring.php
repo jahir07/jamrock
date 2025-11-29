@@ -1,18 +1,37 @@
 <?php
+/**
+ * Autoproctoring REST controller.
+ *
+ * PHP version 7.4+
+ *
+ * @package Jamrock\Controllers
+ */
+
 namespace Jamrock\Controllers;
 
 use Jamrock\Services\Composite;
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Class Autoproctoring
+ *
+ * REST endpoints and sync helpers for AutoProctor integration.
+ */
 class Autoproctoring {
 
+
+	/**
+	 * Attach hooks.
+	 *
+	 * @return void
+	 */
 	public function hooks(): void {
 		add_action( 'rest_api_init', array( $this, 'routes' ) );
 	}
 
 	/**
-	 * Summary of routes
+	 * Register REST routes.
 	 *
 	 * @return void
 	 */
@@ -33,7 +52,7 @@ class Autoproctoring {
 			array(
 				'methods'             => 'POST',
 				'permission_callback' => function () {
-					return is_user_logged_in(); // or current_user_can('read');
+					return is_user_logged_in();
 				},
 				'callback'            => array( $this, 'log_attempt_event' ),
 			)
@@ -58,7 +77,8 @@ class Autoproctoring {
 			array(
 				'methods'             => 'GET',
 				'permission_callback' => function () {
-					return current_user_can( 'read' ); },
+					return current_user_can( 'read' );
+				},
 				'callback'            => array( $this, 'rest_autoproctor_attempts_list' ),
 			)
 		);
@@ -69,7 +89,7 @@ class Autoproctoring {
 			array(
 				'methods'             => 'GET',
 				'permission_callback' => function () {
-					return current_user_can( 'read' ); // or '__return_true' for testing
+					return current_user_can( 'read' );
 				},
 				'callback'            => array( $this, 'rest_autoproctor_attempt_detail' ),
 			)
@@ -81,7 +101,8 @@ class Autoproctoring {
 			array(
 				'methods'             => 'POST',
 				'permission_callback' => function () {
-					return current_user_can( 'manage_options' ); },
+					return current_user_can( 'manage_options' );
+				},
 				'callback'            => array( $this, 'sync_autoproctor_result' ),
 			)
 		);
@@ -92,15 +113,22 @@ class Autoproctoring {
 			array(
 				'methods'             => 'POST',
 				'permission_callback' => function () {
-					return current_user_can( 'manage_options' ); },
+					return current_user_can( 'manage_options' );
+				},
 				'callback'            => array( $this, 'handle_sync_missing' ),
 			)
 		);
 	}
 
+	/**
+	 * Return autoproctor attempt detail by session id.
+	 *
+	 * @param \WP_REST_Request $req Request object.
+	 * @return \WP_REST_Response
+	 */
 	public function rest_autoproctor_attempt_detail( \WP_REST_Request $req ) {
 		$session = sanitize_text_field( (string) $req->get_param( 'session_id' ) );
-		if ( empty( $session ) ) {
+		if ( '' === $session ) {
 			return rest_ensure_response(
 				array(
 					'ok'    => false,
@@ -110,10 +138,24 @@ class Autoproctoring {
 		}
 
 		global $wpdb;
-		$t   = $wpdb->prefix . 'jamrock_autoproctor_attempts';
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $t WHERE session_id=%s LIMIT 1", $session ), ARRAY_A );
+		$t = $wpdb->prefix . 'jamrock_autoproctor_attempts';
 
-		if ( ! $row ) {
+		// Try cache first to reduce DB load.
+		$cache_key = 'jamrock_ap_attempt_' . md5( $session );
+		$cached    = wp_cache_get( $cache_key, 'jamrock_autoproctor' );
+		if ( false !== $cached ) {
+			return rest_ensure_response(
+				array(
+					'ok'      => true,
+					'attempt' => $cached,
+				)
+			);
+		}
+
+		$sql = 'SELECT * FROM ' . $t . ' WHERE session_id=%s LIMIT 1';
+		$row = $wpdb->get_row( $wpdb->prepare( $sql, $session ), ARRAY_A );
+
+		if ( null === $row ) {
 			return rest_ensure_response(
 				array(
 					'ok'    => false,
@@ -136,6 +178,9 @@ class Autoproctoring {
 			'created_at'      => $row['created_at'],
 		);
 
+		// Prime cache for a short period.
+		wp_cache_set( $cache_key, $out, 'jamrock_autoproctor', MINUTE_IN_SECONDS * 5 );
+
 		return rest_ensure_response(
 			array(
 				'ok'      => true,
@@ -145,9 +190,9 @@ class Autoproctoring {
 	}
 
 	/**
-	 * Handle autoproctor sync.
+	 * Handle autoproctor sync-missing endpoint.
 	 *
-	 * @param \WP_REST_Request $req
+	 * @param \WP_REST_Request $req Request object.
 	 * @return \WP_Error|\WP_REST_Response
 	 */
 	public function handle_sync_missing( \WP_REST_Request $req ) {
@@ -156,16 +201,16 @@ class Autoproctoring {
 	}
 
 	/**
-	 * Summary of log_attempt_event
+	 * Log attempt events from the client.
 	 *
-	 * @param \WP_REST_Request $req request object.
+	 * @param \WP_REST_Request $req Request object.
 	 * @return \WP_REST_Response
 	 */
 	public function log_attempt_event( \WP_REST_Request $req ) {
 		global $wpdb;
 		$t = $wpdb->prefix . 'jamrock_autoproctor_attempts';
 
-		// Prefer JSON body parsing (supports fetch with JSON)
+		// Prefer JSON body parsing.
 		$params = $req->get_json_params() ?: array();
 
 		$user_id    = get_current_user_id();
@@ -178,7 +223,7 @@ class Autoproctoring {
 		$user_name  = isset( $user_info['name'] ) ? sanitize_text_field( $user_info['name'] ) : null;
 		$user_email = isset( $user_info['email'] ) ? sanitize_email( $user_info['email'] ) : null;
 
-		if ( ! $quiz_id || $attempt_id === '' || ! in_array( $event, array( 'started', 'stopped', 'violation' ), true ) ) {
+		if ( ! $quiz_id || '' === $attempt_id || ! in_array( $event, array( 'started', 'stopped', 'violation' ), true ) ) {
 			return new \WP_REST_Response(
 				array(
 					'ok'       => false,
@@ -189,11 +234,9 @@ class Autoproctoring {
 			);
 		}
 
-		// Upsert by attempt_id
-		$row = $wpdb->get_row(
-			$wpdb->prepare( "SELECT id, flags_json FROM $t WHERE session_id=%s LIMIT 1", $attempt_id ),
-			ARRAY_A
-		);
+		// Upsert by attempt_id.
+		$sql = 'SELECT id, flags_json FROM ' . $t . ' WHERE session_id=%s LIMIT 1';
+		$row = $wpdb->get_row( $wpdb->prepare( $sql, $attempt_id ), ARRAY_A );
 
 		$now  = current_time( 'mysql' );
 		$data = array(
@@ -203,10 +246,10 @@ class Autoproctoring {
 			'updated_at' => $now,
 		);
 
-		if ( ! $row ) {
+		if ( null === $row ) {
 			$data += array(
 				'created_at'       => $now,
-				'started_at'       => $event === 'started' ? $now : null,
+				'started_at'       => 'started' === $event ? $now : null,
 				'flags_json'       => null,
 				'raw_payload_json' => wp_json_encode( $payload ),
 				'integrity_score'  => null,
@@ -216,9 +259,6 @@ class Autoproctoring {
 
 			$inserted = $wpdb->insert( $t, $data );
 			if ( false === $inserted ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					error_log( '[AP] insert failed: ' . $wpdb->last_error );
-				}
 				return new \WP_REST_Response(
 					array(
 						'ok'    => false,
@@ -228,15 +268,15 @@ class Autoproctoring {
 				);
 			}
 		} else {
-			// update timestamps/flags and ensure name/email saved/updated
+			// Update timestamps/flags and ensure name/email saved/updated.
 			$update = array( 'updated_at' => $now );
 
-			if ( $event === 'started' ) {
+			if ( 'started' === $event ) {
 				$update['started_at'] = $now;
-			} elseif ( $event === 'stopped' ) {
+			} elseif ( 'stopped' === $event ) {
 				$update['completed_at'] = $now;
-			} elseif ( $event === 'violation' ) {
-				// append violation payloads
+			} elseif ( 'violation' === $event ) {
+				// Append violation payloads.
 				$prev = array();
 				if ( ! empty( $row['flags_json'] ) ) {
 					$decoded = json_decode( (string) $row['flags_json'], true );
@@ -248,22 +288,19 @@ class Autoproctoring {
 				$update['flags_json'] = wp_json_encode( $prev );
 			}
 
-			// update raw_payload_json with latest payload
+			// Update raw_payload_json with latest payload.
 			$update['raw_payload_json'] = wp_json_encode( $payload );
 
-			// update user name/email if provided
-			if ( $user_name !== null ) {
+			// Update user name/email if provided.
+			if ( null !== $user_name ) {
 				$update['user_name'] = $user_name;
 			}
-			if ( $user_email !== null ) {
+			if ( null !== $user_email ) {
 				$update['user_email'] = $user_email;
 			}
 
 			$updated = $wpdb->update( $t, $update, array( 'session_id' => $attempt_id ) );
 			if ( false === $updated ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					error_log( '[AP] update failed: ' . $wpdb->last_error );
-				}
 				return new \WP_REST_Response(
 					array(
 						'ok'    => false,
@@ -278,28 +315,27 @@ class Autoproctoring {
 	}
 
 	/**
-	 * Summary of webhook
+	 * Webhook endpoint for AutoProctor to push results.
 	 *
-	 * @param \WP_REST_Request $req request object.
+	 * @param \WP_REST_Request $req Request object.
 	 * @return \WP_REST_Response
 	 */
 	public function webhook( \WP_REST_Request $req ) {
-		// --- robust header parsing + optional debug (remove debug logs after verification) ---
 		$expect          = trim( (string) get_option( 'jrj_autoproctor_webhook_secret', '' ) );
 		$provided_secret = '';
 
-		// try common header names / server normalizations
 		$provided_secret = (string) $req->get_header( 'X-AP-Secret' );
-		if ( empty( $provided_secret ) ) {
-			$provided_secret = (string) $req->get_header( 'x_ap_secret' ); // nginx/php may convert - to _
+		if ( '' === $provided_secret ) {
+			$provided_secret = (string) $req->get_header( 'x_ap_secret' );
 		}
-		if ( empty( $provided_secret ) ) {
+		if ( '' === $provided_secret ) {
 			$provided_secret = (string) $req->get_header( 'x-ap-secret' );
 		}
-		// fallback to Authorization header (Bearer or custom AP scheme)
-		if ( empty( $provided_secret ) ) {
+
+		// Fallback to Authorization header (Bearer or custom AP scheme).
+		if ( '' === $provided_secret ) {
 			$auth = (string) $req->get_header( 'authorization' );
-			if ( ! empty( $auth ) ) {
+			if ( '' !== $auth ) {
 				if ( stripos( $auth, 'bearer ' ) === 0 ) {
 					$provided_secret = substr( $auth, 7 );
 				} elseif ( stripos( $auth, 'ap ' ) === 0 ) {
@@ -312,11 +348,7 @@ class Autoproctoring {
 
 		$provided_secret = trim( (string) $provided_secret );
 
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( "[AP webhook] expect=[{$expect}] provided=[{$provided_secret}]" );
-		}
-
-		if ( empty( $expect ) || ! hash_equals( $expect, $provided_secret ) ) {
+		if ( '' === $expect || ! hash_equals( $expect, $provided_secret ) ) {
 			return new \WP_REST_Response(
 				array(
 					'ok'    => false,
@@ -326,7 +358,7 @@ class Autoproctoring {
 			);
 		}
 
-		// --- parse JSON body robustly ---
+		// Parse JSON body robustly.
 		$b = $req->get_json_params();
 		if ( ! is_array( $b ) ) {
 			$b = json_decode( $req->get_body(), true );
@@ -341,7 +373,7 @@ class Autoproctoring {
 			}
 		}
 
-		// --- find session id from a set of possible keys ---
+		// Find session id from a set of possible keys.
 		$possible_keys = array( 'session_id', 'testAttemptId', 'tenantTestAttemptId', 'attempt_id', 'id' );
 		$session       = '';
 		foreach ( $possible_keys as $k ) {
@@ -351,10 +383,7 @@ class Autoproctoring {
 			}
 		}
 
-		if ( $session === '' ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( '[AP webhook] no session id found. payload keys: ' . wp_json_encode( array_keys( $b ) ) );
-			}
+		if ( '' === $session ) {
 			return new \WP_REST_Response(
 				array(
 					'ok'    => false,
@@ -364,7 +393,7 @@ class Autoproctoring {
 			);
 		}
 
-		// --- extract score and flags defensively ---
+		// Extract score and flags defensively.
 		$score = null;
 		if ( isset( $b['integrity_score'] ) ) {
 			$score = floatval( $b['integrity_score'] );
@@ -381,14 +410,12 @@ class Autoproctoring {
 			$flags = $b['violations'];
 		}
 
-		// --- update DB row ---
+		// Update DB row.
 		global $wpdb;
 		$t   = $wpdb->prefix . 'jamrock_autoproctor_attempts';
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $t WHERE session_id=%s LIMIT 1", $session ), ARRAY_A );
-		if ( ! $row ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( "[AP webhook] session not found: {$session}" );
-			}
+		$sql = 'SELECT * FROM ' . $t . ' WHERE session_id=%s LIMIT 1';
+		$row = $wpdb->get_row( $wpdb->prepare( $sql, $session ), ARRAY_A );
+		if ( null === $row ) {
 			return new \WP_REST_Response(
 				array(
 					'ok'    => false,
@@ -408,9 +435,6 @@ class Autoproctoring {
 
 		$res = $wpdb->update( $t, $update, array( 'id' => (int) $row['id'] ) );
 		if ( false === $res ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( '[AP webhook] DB update failed: ' . $wpdb->last_error );
-			}
 			return new \WP_REST_Response(
 				array(
 					'ok'    => false,
@@ -420,7 +444,7 @@ class Autoproctoring {
 			);
 		}
 
-		// --- normalize score and update composite if available ---
+		// Normalize score and update composite if available.
 		$norm = max( 0, min( 100, is_null( $score ) ? 0 : floatval( $score ) ) );
 
 		if ( function_exists( 'jrj_applicant_id_from_user' ) ) {
@@ -439,7 +463,7 @@ class Autoproctoring {
 			}
 		}
 
-		// --- GA events ---
+		// GA events.
 		do_action( 'jrj_ga_event', 'proctoring_completed', array( 'quiz_id' => $row['quiz_id'] ) );
 		if ( ! empty( $flags ) ) {
 			do_action(
@@ -456,27 +480,26 @@ class Autoproctoring {
 	}
 
 	/**
-	 * Get autoproctor result by ID.
+	 * Get autoproctor result by attempt id using AP v2 endpoint.
 	 *
-	 * @param mixed $attemptId attempt ID.
+	 * @param string $attempt_id Attempt identifier.
 	 * @return mixed
 	 */
-	private function get_autoproctor_result( $attemptId ) {
-		$clientId     = (string) get_option( 'jrj_autoproctor_api_id', '' );
-		$clientSecret = (string) get_option( 'jrj_autoproctor_api_key', '' );
+	private function get_autoproctor_result( $attempt_id ) {
+		$client_id     = (string) get_option( 'jrj_autoproctor_api_id', '' );
+		$client_secret = (string) get_option( 'jrj_autoproctor_api_key', '' );
 
-		if ( $clientId === '' || $clientSecret === '' ) {
+		if ( '' === $client_id || '' === $client_secret ) {
 			return new \WP_Error( 'missing_credentials', 'Missing AutoProctor credentials' );
 		}
 
-		// Some AP endpoints expect a hashedTestAttemptId (base64 of HMAC-SHA256 raw)
-		$hashed     = base64_encode( hash_hmac( 'sha256', $attemptId, $clientSecret, true ) );
-		$attemptEnc = rawurlencode( $attemptId );
-		$url        = "https://www.autoproctor.co/api/v2/test-attempts/{$attemptEnc}/?tenantClientId=" . rawurlencode( $clientId ) . '&hashedTestAttemptId=' . rawurlencode( $hashed );
+		// Some AP endpoints expect a hashedTestAttemptId (base64 of HMAC-SHA256 raw).
+		$hashed      = base64_encode( hash_hmac( 'sha256', $attempt_id, $client_secret, true ) );
+		$attempt_enc = rawurlencode( $attempt_id );
+		$url         = "https://www.autoproctor.co/api/v2/test-attempts/{$attempt_enc}/?tenantClientId=" . rawurlencode( $client_id ) . '&hashedTestAttemptId=' . rawurlencode( $hashed );
 
-		$auth_header = 'AP ' . base64_encode( $clientId . ':' . $clientSecret ); // keep for compatibility if AP expects this
-		// Alternatively AP may expect X-Client-Id and X-Signature: compute signature for body if needed.
-		$response = wp_remote_get(
+		$auth_header = 'AP ' . base64_encode( $client_id . ':' . $client_secret );
+		$response    = wp_remote_get(
 			$url,
 			array(
 				'headers' => array(
@@ -506,41 +529,36 @@ class Autoproctoring {
 	}
 
 	/**
-	 * Fetch evidence JSON for a given attempt id from AutoProctor (via evidence-records-file-url -> S3).
+	 * Fetch evidence JSON for a given attempt id from AutoProctor.
 	 *
-	 * @param string $attemptId tenantTestAttemptId (e.g. '299f8vrz')
-	 * @return array|\WP_Error parsed JSON (assoc) of evidence file OR WP_Error
+	 * @param string $attempt_id tenantTestAttemptId.
+	 * @return array|\WP_Error
 	 */
-	private function ap_fetch_evidence_records( string $attemptId ) {
-		$clientId     = (string) get_option( 'jrj_autoproctor_api_id', '' );
-		$clientSecret = (string) get_option( 'jrj_autoproctor_api_key', '' );
+	private function ap_fetch_evidence_records( string $attempt_id ) {
+		$client_id     = (string) get_option( 'jrj_autoproctor_api_id', '' );
+		$client_secret = (string) get_option( 'jrj_autoproctor_api_key', '' );
 
-		if ( empty( $clientId ) || empty( $clientSecret ) ) {
+		if ( '' === $client_id || '' === $client_secret ) {
 			return new \WP_Error( 'missing_credentials', 'Missing AutoProctor credentials' );
 		}
 
-		// hashed_test_attempt_id = base64(HMAC-SHA256(attemptId, clientSecret))
-		$hashed_raw = hash_hmac( 'sha256', $attemptId, $clientSecret, true );
+		$hashed_raw = hash_hmac( 'sha256', $attempt_id, $client_secret, true );
 		$hashed_b64 = base64_encode( $hashed_raw );
 
-		// URL encode the base64 for query
 		$url = sprintf(
 			'https://www.autoproctor.co/api/v2/test-attempts/%s/evidence-records-file-url/?client_id=%s&hashed_test_attempt_id=%s',
-			rawurlencode( $attemptId ),
-			rawurlencode( $clientId ),
+			rawurlencode( $attempt_id ),
+			rawurlencode( $client_id ),
 			rawurlencode( $hashed_b64 )
 		);
 
 		$resp = wp_remote_get(
 			$url,
 			array(
-				'headers' => array(
-					'Accept' => 'application/json',
-				),
+				'headers' => array( 'Accept' => 'application/json' ),
 				'timeout' => 20,
 			)
 		);
-
 		if ( is_wp_error( $resp ) ) {
 			return $resp;
 		}
@@ -556,7 +574,6 @@ class Autoproctoring {
 			return new \WP_Error( 'no_evidence_url', 'No evidence file URL returned', array( 'body' => $body ) );
 		}
 
-		// Now fetch presigned S3 JSON
 		$s3_url  = $json['all_evidence_records_file_url'];
 		$s3_resp = wp_remote_get( $s3_url, array( 'timeout' => 30 ) );
 		if ( is_wp_error( $s3_resp ) ) {
@@ -576,10 +593,15 @@ class Autoproctoring {
 		return $evidence_json;
 	}
 
-	// In your Autoproctoring class (you already have get_autoproctor_result)
+	/**
+	 * Sync a single attempt by attempt_id (REST callable).
+	 *
+	 * @param \WP_REST_Request $req Request object.
+	 * @return \WP_REST_Response
+	 */
 	public function sync_autoproctor_result( \WP_REST_Request $req ) {
-		$attemptId = sanitize_text_field( $req->get_param( 'attempt_id' ) );
-		if ( ! $attemptId ) {
+		$attempt_id = sanitize_text_field( (string) $req->get_param( 'attempt_id' ) );
+		if ( '' === $attempt_id ) {
 			return new \WP_REST_Response(
 				array(
 					'ok'    => false,
@@ -589,7 +611,7 @@ class Autoproctoring {
 			);
 		}
 
-		$result = $this->get_autoproctor_result( $attemptId );
+		$result = $this->get_autoproctor_result( $attempt_id );
 		if ( is_wp_error( $result ) ) {
 			return new \WP_REST_Response(
 				array(
@@ -601,7 +623,6 @@ class Autoproctoring {
 			);
 		}
 
-		// Map and update DB (similar to webhook logic)
 		global $wpdb;
 		$t     = $wpdb->prefix . 'jamrock_autoproctor_attempts';
 		$score = isset( $result['integrity_score'] ) ? floatval( $result['integrity_score'] ) : null;
@@ -616,7 +637,7 @@ class Autoproctoring {
 				'completed_at'     => current_time( 'mysql' ),
 				'updated_at'       => current_time( 'mysql' ),
 			),
-			array( 'session_id' => $attemptId )
+			array( 'session_id' => $attempt_id )
 		);
 
 		return new \WP_REST_Response(
@@ -631,37 +652,35 @@ class Autoproctoring {
 	/**
 	 * Fetch test results for a batch of attempt IDs.
 	 *
-	 * @param array $attemptIds List of attempt IDs.
+	 * @param array $attempt_ids List of attempt IDs.
 	 * @return mixed
 	 */
-	private function ap_fetch_test_results_batch( array $attemptIds ) {
-		$attemptIds = array_values(
+	private function ap_fetch_test_results_batch( array $attempt_ids ) {
+		$attempt_ids = array_values(
 			array_filter(
-				array_map( 'strval', $attemptIds ),
+				array_map( 'strval', $attempt_ids ),
 				function ( $v ) {
 					$v = trim( $v );
 					return $v !== '' && preg_match( '/^[A-Za-z0-9_\-]{4,}$/', $v );
 				}
 			)
 		);
-		if ( empty( $attemptIds ) ) {
+		if ( empty( $attempt_ids ) ) {
 			return new \WP_Error( 'no_ids', 'No valid attempt ids provided.' );
 		}
 
 		$client_id     = (string) get_option( 'jrj_autoproctor_api_id', '' );
 		$client_secret = (string) get_option( 'jrj_autoproctor_api_key', '' );
 
-		if ( ! $client_id || ! $client_secret ) {
+		if ( '' === $client_id || '' === $client_secret ) {
 			return new \WP_Error( 'missing_credentials', 'Missing AutoProctor credentials' );
 		}
 
-		$payload = array( 'tenantTestAttemptIds' => array_values( $attemptIds ) );
+		$payload = array( 'tenantTestAttemptIds' => array_values( $attempt_ids ) );
 		$body    = wp_json_encode( $payload );
 
-		// canonical Authorization header that worked for GET earlier
 		$auth_ap = 'AP ' . base64_encode( $client_id . ':' . $client_secret );
 
-		// try series of candidate header sets (URL includes tenantClientId)
 		$url = 'https://www.autoproctor.co/api/v1/test-results/?tenantClientId=' . rawurlencode( $client_id );
 
 		$candidates = array(
@@ -670,12 +689,6 @@ class Autoproctoring {
 				'Authorization' => $auth_ap,
 			),
 		);
-
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( '[AP SYNC] TRY_URL=' . $url );
-			error_log( '[AP SYNC] TRY_HEADERS=' . wp_json_encode( $candidates['headers'] ) );
-			error_log( '[AP SYNC] REQ_BODY=' . $body );
-		}
 
 		$resp = wp_remote_post(
 			$url,
@@ -687,93 +700,80 @@ class Autoproctoring {
 		);
 
 		if ( is_wp_error( $resp ) ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( '[AP SYNC] wp_remote_post error: ' . $resp->get_error_message() );
-			}
+			return $resp;
 		}
 
 		$code      = wp_remote_retrieve_response_code( $resp );
 		$resp_body = wp_remote_retrieve_body( $resp );
 
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( "[AP SYNC] RESP_CODE={$code}" );
-			error_log( "[AP SYNC] RESP_BODY={$resp_body}" );
-		}
-
 		if ( $code < 200 || $code >= 300 ) {
 			return new \WP_Error( 'ap_error', "AP returned {$code}", array( 'body' => $resp_body ) );
 		}
 
-		$json = json_decode( $body, true );
+		$json = json_decode( $resp_body, true );
 		if ( null === $json && json_last_error() !== JSON_ERROR_NONE ) {
 			return new \WP_Error( 'invalid_json', 'Invalid JSON from AP', array( 'raw' => $resp_body ) );
 		}
 
 		$report = $this->process_ap_batch_results( $json );
 
-		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( '[AP SYNC] PROCESS_REPORT=' . wp_json_encode( $report ) );
-		}
-
 		return $report;
 	}
 
+	/**
+	 * Pull up to $limit missing attempts and sync them.
+	 *
+	 * @param int $limit Maximum rows to sync.
+	 * @return bool|array
+	 */
 	public function do_batch_sync_missing( $limit = 50 ) {
 		global $wpdb;
 		$t = $wpdb->prefix . 'jamrock_autoproctor_attempts';
 
-		// fetch up to N missing attempts
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT session_id FROM $t WHERE integrity_score IS NULL LIMIT %d", intval( $limit ) ), ARRAY_A );
+		$sql  = 'SELECT session_id FROM ' . $t . ' WHERE integrity_score IS NULL LIMIT %d';
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, intval( $limit ) ), ARRAY_A );
 		if ( ! $rows ) {
 			return true;
 		}
-		$attemptIds = array_column( $rows, 'session_id' );
-		return $this->do_batch_sync_by_ids( $attemptIds );
+		$attempt_ids = array_column( $rows, 'session_id' );
+		return $this->do_batch_sync_by_ids( $attempt_ids );
 	}
 
-
 	/**
-	 * Sync specific attempt ids (array)
-	 * Returns true or WP_Error
-	 */
-	/**
-	 * Sync specific attempt ids (array)
-	 * Returns array report or WP_Error
+	 * Sync specific attempt ids (array).
+	 * Returns array report or WP_Error.
 	 *
-	 * @param array $attemptIds
+	 * @param array $attempt_ids Attempt IDs.
 	 * @return array|\WP_Error
 	 */
-	public function do_batch_sync_by_ids( array $attemptIds ) {
-		if ( empty( $attemptIds ) ) {
+	public function do_batch_sync_by_ids( array $attempt_ids ) {
+		if ( empty( $attempt_ids ) ) {
 			return new \WP_Error( 'no_ids', 'No attempt ids provided.' );
 		}
 
-		// sanitize attempt ids early (defensive)
-		$attemptIds = array_values(
+		$attempt_ids = array_values(
 			array_filter(
-				array_map( 'strval', $attemptIds ),
+				array_map( 'strval', $attempt_ids ),
 				function ( $v ) {
 					$v = trim( $v );
 					return $v !== '' && preg_match( '/^[A-Za-z0-9_\-]{4,}$/', $v );
 				}
 			)
 		);
-		if ( empty( $attemptIds ) ) {
+		if ( empty( $attempt_ids ) ) {
 			return new \WP_Error( 'no_ids', 'No valid attempt ids provided.' );
 		}
 
-		// fetch from AutoProctor (this may return WP_Error, a processed report, or raw API JSON)
-		$res = $this->ap_fetch_test_results_batch( $attemptIds );
+		$res = $this->ap_fetch_test_results_batch( $attempt_ids );
 		if ( is_wp_error( $res ) ) {
 			return $res;
 		}
 
-		// If ap_fetch_test_results_batch already processed and returned report, just return it
+		// If ap_fetch_test_results_batch already processed and returned report, just return it.
 		if ( isset( $res['updated'] ) && isset( $res['skipped'] ) ) {
-			return $res; // already processed
+			return $res;
 		}
 
-		// Otherwise expect raw API shape (with 'results' or array)
 		$results = $res['results'] ?? $res;
 		if ( ! is_array( $results ) ) {
 			return new \WP_Error( 'bad_response', 'Unexpected AP response' );
@@ -852,7 +852,7 @@ class Autoproctoring {
 			}
 
 			// find local row
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id FROM $t WHERE session_id=%s LIMIT 1", $session ), ARRAY_A );
+			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT id FROM ' . $t . ' WHERE session_id=%s LIMIT 1', $session ), ARRAY_A );
 			if ( ! $row ) {
 				++$skipped;
 				$errors[] = 'session_not_found:' . $session;
@@ -966,7 +966,7 @@ class Autoproctoring {
 			}
 
 			// find local row
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id FROM $t WHERE session_id=%s LIMIT 1", $session ), ARRAY_A );
+			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT id FROM ' . $t . ' WHERE session_id=%s LIMIT 1', $session ), ARRAY_A );
 			if ( ! $row ) {
 				// Not found — optionally insert a new row or skip. Here we skip and log.
 				$errors[] = "session_not_found: {$session}";
@@ -1004,7 +1004,7 @@ class Autoproctoring {
 	}
 
 	/**
-	 * Refresh autoproctor data.
+	 * Refresh autoproctor data for a single session.
 	 *
 	 * @param \WP_REST_Request $req request.
 	 * @return \WP_Error|\WP_REST_Response
@@ -1013,7 +1013,7 @@ class Autoproctoring {
 		global $wpdb;
 		$t       = $wpdb->prefix . 'jamrock_autoproctor_attempts';
 		$session = sanitize_text_field( $req->get_param( 'session_id' ) ?: $req->get_param( 'id' ) ?: '' );
-		if ( ! $session ) {
+		if ( '' === $session ) {
 			return new \WP_REST_Response(
 				array(
 					'ok'    => false,
@@ -1040,10 +1040,6 @@ class Autoproctoring {
 		// Try to fetch evidence JSON (may fail if AP not give)
 		$evidence = $this->ap_fetch_evidence_records( $session );
 		if ( is_wp_error( $evidence ) ) {
-			// not fatal: we still proceed with result but log for debug
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( '[AP REFRESH] evidence fetch failed: ' . $evidence->get_error_message() );
-			}
 			$evidence = null;
 		}
 
@@ -1060,13 +1056,12 @@ class Autoproctoring {
 		if ( $evidence ) {
 			$update['evidence_json'] = wp_json_encode( $evidence );
 			// Optionally derive flags from evidence (for tab/noise counts) and append into flags_json
-			// e.g. merge evidence 'primary_device_evidence' where violation==true into flags list
 			try {
 				$derived = array();
 				if ( ! empty( $evidence['primary_device_evidence'] ) && is_array( $evidence['primary_device_evidence'] ) ) {
 					foreach ( $evidence['primary_device_evidence'] as $it ) {
 						$derived[] = array(
-							'type'         => $it['label'] ?? ( $it['violation'] ? 'violation' : 'event' ),
+							'type'         => $it['label'] ?? ( ! empty( $it['violation'] ) ? 'violation' : 'event' ),
 							'ts'           => $it['occurred_at_ISO'] ?? ( $it['recorded_at_ISO'] ?? null ),
 							'evidence_url' => $it['evidence_url'] ?? null,
 							'violation'    => ! empty( $it['violation'] ),
@@ -1080,9 +1075,14 @@ class Autoproctoring {
 					$update['flags_json'] = wp_json_encode( $merged );
 				}
 			} catch ( \Throwable $e ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					error_log( '[AP REFRESH] derived flags failed: ' . $e->getMessage() );
-				}
+				return new \WP_REST_Response(
+					array(
+						'ok'      => false,
+						'error'   => 'evidence_processing_failed',
+						'message' => $e->getMessage(),
+					),
+					500
+				);
 			}
 		}
 
@@ -1097,7 +1097,7 @@ class Autoproctoring {
 			);
 		}
 
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $t WHERE session_id=%s LIMIT 1", $session ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . $t . ' WHERE session_id=%s LIMIT 1', $session ), ARRAY_A );
 		return rest_ensure_response(
 			array(
 				'ok'      => true,
@@ -1107,9 +1107,9 @@ class Autoproctoring {
 	}
 
 	/**
-	 * Summary of rest_autoproctor_attempts_list
+	 * List autoproctor attempts with pagination and basic filters.
 	 *
-	 * @param \WP_REST_Request $req
+	 * @param \WP_REST_Request $req Request.
 	 * @return \WP_Error|\WP_REST_Response
 	 */
 	public function rest_autoproctor_attempts_list( \WP_REST_Request $req ) {
@@ -1120,11 +1120,9 @@ class Autoproctoring {
 		$per_page = max( 1, min( 100, (int) $req->get_param( 'per_page', 10 ) ) );
 		$offset   = ( $page - 1 ) * $per_page;
 
-		// optional filters (status/candidness etc) — adapt to your DB columns
 		$where = array();
 		$args  = array();
 
-		// provider is autoproctor by design; but keep filter for compatibility
 		$provider = $req->get_param( 'provider' );
 		if ( $provider ) {
 			$where[] = 'provider = %s';
@@ -1133,12 +1131,11 @@ class Autoproctoring {
 
 		$candidness = $req->get_param( 'candidness' );
 		if ( $candidness ) {
-			// map candidness to flags or status column; example uses flags_json
-			if ( $candidness === 'flagged' ) {
+			if ( 'flagged' === $candidness ) {
 				$where[] = 'flags_json IS NOT NULL AND flags_json <> ""';
-			} elseif ( $candidness === 'completed' ) {
+			} elseif ( 'completed' === $candidness ) {
 				$where[] = 'completed_at IS NOT NULL';
-			} elseif ( $candidness === 'pending' ) {
+			} elseif ( 'pending' === $candidness ) {
 				$where[] = 'integrity_score IS NULL';
 			}
 		}
@@ -1148,21 +1145,18 @@ class Autoproctoring {
 			$where_sql = 'WHERE ' . implode( ' AND ', $where );
 		}
 
-		// total
-		$count_sql = $wpdb->prepare( "SELECT COUNT(1) FROM $t $where_sql", $args );
-		$total     = (int) $wpdb->get_var( $count_sql );
+		$count_sql = 'SELECT COUNT(1) FROM ' . $t . ' ' . $where_sql;
+		$total     = (int) $wpdb->get_var( $wpdb->prepare( $count_sql, ...$args ) );
 
-		// items
-		$sql  = $wpdb->prepare( "SELECT * FROM $t $where_sql ORDER BY created_at DESC LIMIT %d OFFSET %d", array_merge( $args, array( $per_page, $offset ) ) );
-		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		$sql  = 'SELECT * FROM ' . $t . ' ' . $where_sql . ' ORDER BY created_at DESC LIMIT %d OFFSET %d';
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, ...array_merge( $args, array( $per_page, $offset ) ) ), ARRAY_A );
 
-		// map DB columns to frontend fields expected by Vue
 		$items = array_map(
 			function ( $r ) {
 				return array(
 					'id'            => (int) $r['id'],
 					'provider'      => $r['provider'],
-					'first_name'    => '', // optional: parse from raw_payload_json if available
+					'first_name'    => '',
 					'last_name'     => '',
 					'email'         => $r['user_email'] ?? null,
 					'session_id'    => $r['session_id'],

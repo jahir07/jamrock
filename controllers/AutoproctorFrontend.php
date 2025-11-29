@@ -101,8 +101,8 @@ class AutoproctorFrontend {
 
 		// Lightweight container (hidden toolbar; we’ll auto start/stop)
 		$html = '
-    <div id="ap-test-proctoring-status"></div>
-    ';
+    	<div id="ap-test-proctoring-status" style="display: none;"></div>
+    	';
 
 		return $content . $html;
 	}
