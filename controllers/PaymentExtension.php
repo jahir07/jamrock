@@ -47,6 +47,18 @@ class PaymentExtension {
 					return is_user_logged_in(); },
 			)
 		);
+
+		register_rest_route(
+			'jamrock/v1',
+			'/payment-extensions/(?P<id>\d+)/status',
+			array(
+				'methods' => 'POST',
+				'callback' => array($this, 'update_status'),
+				'permission_callback' => function () {
+					return is_user_logged_in();
+				},
+			)
+		);
 	}
 
 	public function getExtension( WP_REST_Request $req ) {
@@ -273,5 +285,39 @@ class PaymentExtension {
 				'signed_pdf_url' => $signed_url,
 			)
 		);
+	}
+
+	/**
+	 * Summary of update_status
+	 * @param \WP_REST_Request $req
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function update_status( WP_REST_Request $req ) {
+		global $wpdb;
+		$tbl = $wpdb->prefix . 'jamrock_housing_applications';
+
+		$id = intval($req->get_param('id'));
+		$status = sanitize_text_field($req->get_param('status'));
+
+
+		if (!in_array($status, array('approved', 'rejected'), true)) {
+			return new \WP_Error('invalid_status', 'Status must be approved or rejected', array('status' => 400));
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$updated = $wpdb->update(
+			$tbl,
+			array(
+				'payment_extension_status' => $status,
+				'updated_at' => current_time('mysql'),
+			),
+			array('id' => $id)
+		);
+
+		if (false === $updated) {
+			return new \WP_Error('db_error', 'Update failed', array('status' => 500));
+		}
+
+		return rest_ensure_response(array('ok' => true));
 	}
 }

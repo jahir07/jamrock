@@ -343,7 +343,7 @@ class Housing {
 	 * Handle Verification.
 	 *
 	 * @param WP_REST_Request $req Request.
-	 * @return \WP_REST_Response
+	 * @return \WP_REST_Response|WP_Error
 	 */
 	public function housing_handle_verify( WP_REST_Request $req ) {
 		global $wpdb;
@@ -542,13 +542,12 @@ class Housing {
 		}
 
 		// Clean Inputs.
-		$panel_enable         = $req->get_param( 'enable' ) ? 1 : 0;
-		$agreement_enable         = $req->get_param( 'agreement_enable' ) ? 1 : 0;
-		$enable = $agreement_enable ? $agreement_enable : $panel_enable;
-		
+		$enable         	  		= $req->get_param( 'enable' );
+		$show_candidate         	= $req->get_param( 'show_candidate' );
+
 		$extended_until = sanitize_text_field( $req->get_param( 'extended_until' ) );
 		$notes          = sanitize_textarea_field( $req->get_param( 'note' ) );
-		$status 		= sanitize_textarea_field($req->get_param('status'));
+		$status 		= sanitize_text_field($req->get_param('status'));
 		$fields_raw     = $req->get_param( 'fields_json' );
 
 		// Decode Fields JSON if string.
@@ -563,7 +562,7 @@ class Housing {
 		$new_ext = array_merge(
 			$existing_ext,
 			array(
-				'agreement_enable' => $enable,
+				'show_candidate' 	=> $show_candidate,
 				'extended_until'    => $extended_until,
 				'notes'             => $notes,
 				'status' 			=> $status,
@@ -576,7 +575,7 @@ class Housing {
 		$wpdb->update(
 			$this->table,
 			array(
-				'extension_enabled' => $enable,
+				'extension_enabled' => $enable, // main table field.
 				'payment_extension' => wp_json_encode( $new_ext ),
 				'updated_at'        => current_time( 'mysql' ),
 			),

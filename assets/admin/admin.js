@@ -37078,18 +37078,27 @@ function safeParseJson(v) {
           status: filter.status || "",
           extension_status: filter.extension_status || ""
         });
-        const res = await fetch(`${JRJ_ADMIN.root}housing/applicants?${q}`, {
+        const url = `${JRJ_ADMIN.root}housing/applicants?${q.toString()}`;
+        const res = await fetch(url, {
+          method: "GET",
+          credentials: "same-origin",
           headers: {
             "X-WP-Nonce": JRJ_ADMIN.nonce
           }
         });
         const json = await res.json();
         if (json.ok) {
-          items.value = json.items || [];
+          const rawItems = json.items || [];
+          items.value = rawItems.map(item => {
+            item.payment_extension = safeParseJson(item.payment_extension) || {};
+            item.for_rental = safeParseJson(item.for_rental) || {};
+            return item;
+          });
           total.value = json.total || 0;
         }
       } catch (e) {
-        showNotice("error", "Error loading list");
+        console.error("housing list load error", e);
+        showNotice("error", "Failed to load housing list: " + (e.message || e));
       } finally {
         loading.value = false;
       }
@@ -37204,10 +37213,13 @@ function safeParseJson(v) {
       if (!p) return false;
       return Number(p) === 1;
     }
-    async function toggleExtension(applicantId, enable = 1) {
+
+    // Enable / Disable Extension
+    async function toggleExtension(applicantId, enable = 1, show_candidate = 0) {
       try {
         const body = new URLSearchParams();
         body.append("enable", enable ? "1" : "0");
+        body.append("show_candidate", show_candidate);
         const res = await fetch(`${JRJ_ADMIN.root}housing/applicants/${applicantId}/extension`, {
           method: "POST",
           headers: {
@@ -37276,7 +37288,8 @@ function safeParseJson(v) {
           date: extensionForm.signed_date || ""
         };
         const body = new URLSearchParams();
-        body.append("agreement_enable", 1);
+        body.append("enable", 1); // main panel.
+        body.append("show_candidate", 1); // candidate panel.
         body.append("extended_until", extensionForm.extended_until || "");
         body.append("note", extensionForm.note || "");
         body.append("status", "pending");
@@ -37303,9 +37316,10 @@ function safeParseJson(v) {
       extensionModalLoading.value = true;
       try {
         const body = new URLSearchParams();
+        body.append("id", id);
         body.append("status", status);
         // reusing housing status update logic but context is extension modal
-        const res = await fetch(`${JRJ_ADMIN.root}housing/applicants/${id}`, {
+        const res = await fetch(`${JRJ_ADMIN.root}payment-extensions/${id}/status`, {
           method: "POST",
           headers: {
             "X-WP-Nonce": JRJ_ADMIN.nonce
@@ -37345,6 +37359,12 @@ function safeParseJson(v) {
       d.setDate(d.getDate() + 1);
       return d.toISOString().split("T")[0];
     };
+    const getDynamicUrl = url => {
+      if (!url) return "";
+      const currentProtocol = window.location.protocol;
+      const urlWithoutProtocol = url.replace(/^https?:\/\//i, "");
+      return `${currentProtocol}//${urlWithoutProtocol}`;
+    };
     (0,vue__WEBPACK_IMPORTED_MODULE_0__.onMounted)(load);
     return {
       items,
@@ -37381,7 +37401,8 @@ function safeParseJson(v) {
       showNotice,
       statusClass,
       pretty,
-      nextDay
+      nextDay,
+      getDynamicUrl
     };
   },
   template: `
@@ -37463,14 +37484,15 @@ function safeParseJson(v) {
                  <div class="flex items-center gap-2">
                     <div v-if="isExtensionEnabled(item)" class="flex items-center gap-2">
                         <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                        <span class="text-xs font-bold text-emerald-700">Active</span>
+                        <span v-if="item.payment_extension?.status === 'submitted'" class="text-xs font-bold text-emerald-700">Signed</span>
+                        <span v-else class="text-xs text-emerald-600">Active</span>
                         <button @click="openExtensionModal(item)" class="text-xs text-blue-600 hover:underline px-3 py-1.5 border bottom-1 border-cyan-500 rounded-md shadow-sm">Manage</button>
-                        <button @click="toggleExtension(item.applicant_id, 0)" class="text-xs text-indigo-600 hover:underline px-3 py-1.5">Disable</button>
+                        <button @click="toggleExtension(item.applicant_id, 0, 0)" class="text-xs text-indigo-600 hover:underline px-3 py-1.5">Disable</button>
                     </div>
                     <div v-else class="flex items-center gap-2">
                         <span class="w-2 h-2 rounded-full bg-slate-300"></span>
                         <span class="text-xs text-slate-400">Inactive</span>
-                        <button @click="toggleExtension(item.applicant_id, 1)" class="text-xs text-indigo-600 hover:underline px-3 py-1.5">Enable</button>
+                        <button @click="toggleExtension(item.applicant_id, 1, 0)" class="text-xs text-indigo-600 hover:underline px-3 py-1.5">Enable</button>
                     </div>
                  </div>
               </td>
@@ -37495,10 +37517,14 @@ function safeParseJson(v) {
     </div>
 
     <div v-if="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" @click.self="modalOpen=false">
-      <div class="bg-white w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="bg-white w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
           <h3 class="text-lg font-bold text-slate-800">Application Details</h3>
           <button @click="modalOpen=false" class="text-slate-400 hover:text-slate-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div v-if="notice.show" :class="notice.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'" class="mb-4 p-4 rounded-lg border text-sm font-medium flex items-center gap-2">
+          <span v-if="notice.type==='success'">✓</span><span v-else>⚠️</span>
+          {{ notice.message }}
         </div>
         <div class="p-6 overflow-y-auto space-y-6">
           <div v-if="modalLoading" class="text-center py-10 text-slate-400">Loading details...</div>
@@ -37511,7 +37537,7 @@ function safeParseJson(v) {
              </div>
              <div v-if="modalItem.rejection_reason" class="bg-red-50 p-3 rounded border border-red-100 text-sm text-red-800"><strong>Reason:</strong> {{ modalItem.rejection_reason }}</div>
              
-             <div v-if="modalItem.for_rental" class="space-y-2">
+             <div v-if="modalItem.for_rental" class="space-y-2 mt-4">
                 <h4 class="text-sm font-bold text-slate-800 border-b pb-1">Rental Data</h4>
                 <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                    <div v-for="(val, key) in modalItem.for_rental" :key="key"><span class="text-slate-400 text-xs block">{{ pretty(key) }}</span><span class="text-slate-700">{{ val || '-' }}</span></div>
@@ -37540,138 +37566,187 @@ function safeParseJson(v) {
 
     <div v-if="medicalModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" @click.self="medicalModalOpen=false">
       <div class="bg-white w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-          <h3 class="text-lg font-bold text-slate-800">Medical Record</h3>
-          <button @click="medicalModalOpen=false" class="text-slate-400 hover:text-slate-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        
+        <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
+          <div>
+             <h3 class="text-lg font-bold text-slate-800">Medical Record Review</h3>
+             <p class="text-xs text-slate-500">Review applicant history and clearance documents.</p>
+          </div>
+          <button @click="medicalModalOpen=false" class="text-slate-400 hover:text-slate-600 transition-colors">
+             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
         </div>
-        <div v-if="modalLoading" class="p-10 text-center text-slate-400">Loading...</div>
-        <div v-else-if="!medicalItem" class="p-10 text-center"><div class="bg-amber-50 text-amber-700 p-4 rounded inline-block">No medical record.</div></div>
-        <div v-else class="flex flex-col h-full overflow-hidden">
-           <div class="flex border-b border-slate-200 bg-white px-6">
-              <button @click="activeTab='history'" :class="activeTab==='history' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500'" class="px-4 py-3 text-sm font-bold border-b-2 transition-colors">History</button>
-              <button @click="activeTab='clearance'" :class="activeTab==='clearance' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500'" class="px-4 py-3 text-sm font-bold border-b-2 transition-colors">Clearance</button>
+
+        <div v-if="modalLoading" class="flex-1 flex flex-col items-center justify-center p-10 text-slate-400">
+            <svg class="animate-spin h-8 w-8 text-indigo-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            <span>Loading data...</span>
+        </div>
+        
+        <div v-else-if="!medicalItem" class="flex-1 flex items-center justify-center p-10">
+           <div class="bg-amber-50 text-amber-700 p-4 rounded-lg border border-amber-200 flex items-center gap-3">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+              No medical affidavit found for this applicant.
            </div>
-           <div class="p-6 overflow-y-auto bg-slate-50/50 flex-1">
+        </div>
+
+        <div v-else class="flex flex-col h-full overflow-hidden bg-slate-50/50">
+           
+           <div v-if="medicalItem.medical_clearance_status === 'approved'" class="bg-emerald-50 border-b border-emerald-100 px-6 py-3 flex items-center justify-between">
+              <div class="flex items-center gap-2 text-emerald-700 font-bold text-sm">
+                 <div class="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>
+                 Medical Clearance Approved
+              </div>
+              <div class="text-xs text-emerald-600">This applicant is cleared to proceed.</div>
+           </div>
+
+           <div v-else-if="medicalItem.medical_clearance_status === 'rejected'" class="bg-red-50 border-b border-red-100 px-6 py-3 flex items-center justify-between">
+              <div class="flex items-center gap-2 text-red-700 font-bold text-sm">
+                 <div class="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></div>
+                 Medical Clearance Rejected
+              </div>
+              <div class="text-xs text-red-600">Applicant must resubmit documents.</div>
+           </div>
+
+           <div v-else-if="medicalItem.has_conditions === 'yes'" class="bg-blue-50 border-b border-blue-100 px-6 py-3 flex items-center justify-between">
+              <div class="flex items-center gap-2 text-blue-700 font-bold text-sm">
+                 <div class="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+                 Pending Review
+              </div>
+              <div class="text-xs text-blue-600">Please review the clearance certificate below.</div>
+           </div>
+
+           <div class="flex border-b border-slate-200 bg-white px-6 shadow-sm">
+              <button @click="activeTab='history'" :class="activeTab==='history' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'" class="px-4 py-3 text-sm font-bold border-b-2 transition-colors">History</button>
+              <button @click="activeTab='clearance'" :class="activeTab==='clearance' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'" class="px-4 py-3 text-sm font-bold border-b-2 transition-colors">Clearance Documents</button>
+           </div>
+
+           <div class="p-6 overflow-y-auto flex-1">
               
-              <div v-if="activeTab==='history'">
-                <div class="space-y-6">
-                    
-                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div class="px-6 py-4 border-b border-slate-200 bg-slate-50">
-                            <h4 class="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
-                                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-                                Personal Information
-                            </h4>
-                        </div>
-                        
-                        <div v-if="medicalItem.details && medicalItem.details.medical_history" class="p-6">
-                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                <template v-for="(ans, question, index) in medicalItem.details.medical_history">
-                                    <div v-if="index < 7" :key="question">
-                                        <label class="block text-xs font-bold text-slate-400 uppercase mb-1">{{ pretty(question) }}</label>
-                                        <div class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-1">
-                                            {{ ans || '-' }}
-                                        </div>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-                    </div>
+              <div v-if="activeTab==='history'" class="space-y-6">
+                  
+                  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div class="px-6 py-3 border-b border-slate-200 bg-slate-50">
+                          <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wide">Personal Information</h4>
+                      </div>
+                      <div v-if="medicalItem.details && medicalItem.details.medical_history" class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <template v-for="(ans, question, index) in medicalItem.details.medical_history">
+                              <div v-if="index < 7" :key="question">
+                                  <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">{{ pretty(question) }}</label>
+                                  <div class="text-sm font-medium text-slate-800">{{ ans || '-' }}</div>
+                              </div>
+                          </template>
+                      </div>
+                  </div>
 
-                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div class="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                            <h4 class="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
-                                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
-                                Medical Conditions
-                            </h4>
-                        </div>
-
-                        <div v-if="medicalItem.details && medicalItem.details.medical_history" class="overflow-x-auto">
-                            <table class="w-full text-left text-sm">
-                                <thead class="bg-slate-50 text-slate-500 font-bold text-xs uppercase tracking-wider border-b border-slate-200">
-                                    <tr>
-                                        <th class="px-6 py-3 w-2/3">Condition</th>
-                                        <th class="px-6 py-3 w-1/3">Response</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-slate-100">
-                                    <template v-for="(ans, question, index) in medicalItem.details.medical_history">
-                                        <tr v-if="index >= 7" :key="question" 
-                                            class="transition-colors"
-                                            :class="(ans === 'Yes' || ans === true) ? 'bg-red-50 hover:bg-red-100/50' : 'hover:bg-slate-50'">
-                                            
-                                            <td class="px-6 py-3 font-medium text-slate-700">
-                                                {{ pretty(question) }}
-                                            </td>
-                                            
-                                            <td class="px-6 py-3 font-bold">
-                                                <span v-if="ans === 'Yes' || ans === true" class="inline-flex items-center gap-1.5 text-red-700 bg-white border border-red-200 px-2.5 py-1 rounded text-xs shadow-sm">
-                                                    <svg class="w-3 h-3 text-red-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
-                                                    YES
-                                                </span>
-                                                <span v-else class="text-slate-400 text-xs uppercase">
-                                                    {{ ans || 'No' }}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </template>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div v-else class="text-center py-12 text-slate-400 italic">
-                            No medical data available.
-                        </div>
-                    </div>
-                </div>
-            </div>
+                  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div class="px-6 py-3 border-b border-slate-200 bg-slate-50">
+                          <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wide">Medical Conditions</h4>
+                      </div>
+                      <div v-if="medicalItem.details && medicalItem.details.medical_history">
+                          <table class="w-full text-left text-sm">
+                              <tbody class="divide-y divide-slate-100">
+                                  <template v-for="(ans, question, index) in medicalItem.details.medical_history">
+                                      <tr v-if="index >= 7" :key="question" :class="(ans === 'Yes' || ans === true) ? 'bg-red-50' : ''">
+                                          <td class="px-6 py-3 font-medium text-slate-600">{{ pretty(question) }}</td>
+                                          <td class="px-6 py-3 text-right">
+                                              <span v-if="ans === 'Yes' || ans === true" class="inline-flex items-center gap-1 text-red-700 font-bold text-xs uppercase"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>YES</span>
+                                              <span v-else class="text-slate-400 text-xs uppercase font-medium">No</span>
+                                          </td>
+                                      </tr>
+                                  </template>
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
+              </div>
 
               <div v-if="activeTab==='clearance'">
-                 <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm mb-6 flex justify-between">
-                    <div><div class="text-xs text-slate-400 font-bold uppercase">Conditions?</div><div class="text-lg font-bold" :class="medicalItem.has_conditions==='yes'?'text-red-600':'text-emerald-600'">{{ medicalItem.has_conditions.toUpperCase() }}</div></div>
-                    <div class="text-right"><div class="text-xs text-slate-400 font-bold uppercase">Status</div><span class="px-3 py-1 rounded-full text-sm font-bold border mt-1 inline-block" :class="statusClass(medicalItem.medical_clearance_status)">{{ medicalItem.medical_clearance_status.toUpperCase() }}</span></div>
-                 </div>
                  <div v-if="medicalItem.has_conditions === 'yes'" class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
                     <h4 class="text-sm font-bold text-slate-800 mb-4">Clearance Certificate</h4>
-                    <div v-if="medicalItem.medical_clearance_file" class="flex items-center gap-4 p-4 bg-blue-50 rounded-lg border border-blue-100 mb-6">
-                       <div class="text-blue-500"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z" /></svg></div>
-                       <a :href="medicalItem.medical_clearance_file" target="_blank" class="text-sm text-blue-600 hover:underline font-bold">View / Download PDF</a>
+                    
+                    <div v-if="medicalItem.medical_clearance_file" class="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200 mb-6 group hover:border-indigo-300 transition-colors">
+                       <div class="bg-white p-3 rounded-lg text-red-500 shadow-sm group-hover:scale-110 transition-transform">
+                           <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z" /><path d="M3 8a2 2 0 012-2v10h8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" /></svg>
+                       </div>
+                       <div class="flex-1">
+                          <div class="text-sm font-bold text-slate-900">Signed Clearance PDF</div>
+                          <div class="text-xs text-slate-500 mb-1">Uploaded by applicant</div>
+                          <a :href="medicalItem.medical_clearance_file" target="_blank" class="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline">
+                             View Document <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                          </a>
+                       </div>
                     </div>
-                    <div class="flex gap-3 justify-end pt-4 border-t">
-                        <button @click="updateMedicalStatus('rejected')" :disabled="modalLoading" class="px-4 py-2 border border-red-200 text-red-600 rounded hover:bg-red-50">Reject</button>
-                        <button @click="updateMedicalStatus('approved')" :disabled="modalLoading" class="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">Approve</button>
+                    <div v-else class="p-6 text-center border-2 border-dashed border-slate-300 rounded-lg bg-slate-50">
+                        <div class="text-slate-400 mb-2">No file uploaded yet</div>
+                        <div class="text-xs text-slate-500">Applicant has declared medical conditions but hasn't uploaded the clearance form.</div>
                     </div>
                  </div>
+
+                 <div v-else class="flex flex-col items-center justify-center p-12 text-center bg-white rounded-xl border border-slate-200 shadow-sm h-64">
+                    <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-400">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <h4 class="text-lg font-bold text-slate-800">Clearance Not Required</h4>
+                    <p class="text-sm text-slate-500 max-w-xs mt-2">This applicant has not reported any medical conditions that require a doctor's clearance.</p>
+                 </div>
               </div>
+           </div>
+
+           <div class="flex border-t border-slate-200 bg-white px-6 py-4 justify-between items-center gap-3">
+                <div class="text-xs text-slate-400">
+                    Last updated: {{ medicalItem.updated_at || medicalItem.created_at || 'Never' }}
+                </div>
+                
+                    <button 
+                        @click="updateMedicalStatus('rejected')" 
+                        :disabled="modalLoading || medicalItem.medical_clearance_status === 'rejected'"
+                        class="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                        Reject
+                    </button>
+                    <button 
+                        @click="updateMedicalStatus('approved')" 
+                        :disabled="modalLoading || medicalItem.medical_clearance_status === 'approved'"
+                        class="px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 shadow-md shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform active:scale-95">
+                        Approve
+                    </button>
            </div>
         </div>
       </div>
     </div>
 
     <div v-if="extensionModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" @click.self="extensionModalOpen=false">
-      <div class="bg-white w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="bg-white w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
         <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
           <h3 class="text-lg font-bold text-slate-800">Manage Payment Extension</h3>
           <button @click="extensionModalOpen=false" class="text-slate-400 hover:text-slate-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
         </div>
 
+        <div v-if="notice.show" :class="notice.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'" class="mb-4 p-4 rounded-lg border text-sm font-medium flex items-center gap-2">
+          <span v-if="notice.type==='success'">✓</span><span v-else>⚠️</span>
+          {{ notice.message }}
+        </div>
+
         <div class="p-6 overflow-y-auto">
            <div v-if="extensionModalLoading" class="text-center text-slate-400 py-8">Processing...</div>
            <div v-else class="space-y-6">
-              
               <div class="flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
-                 <div>
-                    <h4 class="font-bold text-indigo-900">Extension Agreement</h4>
-                    <p class="text-xs text-indigo-600">Toggle the user's ability to see and sign the extension form.</p>
-                 </div>
-                 <div class="flex items-center gap-2">
-                    <button v-if="extensionForm.enabled" @click="toggleExtension(modalItem.applicant_id, 0)" class="px-3 py-1.5 bg-white border border-red-200 text-red-600 text-xs font-bold rounded shadow-sm hover:bg-red-50">REVOKE</button>
-                    <button v-else @click="toggleExtension(modalItem.applicant_id, 1)" class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded shadow-sm hover:bg-indigo-700">ENABLE</button>
-                 </div>
+                <div>
+                    <h4 class="font-bold text-indigo-900">Payment Extension Agreement</h4>
+                    <p class="text-xs text-indigo-600">If its enable it will visible in candidate panel to see <br /> and sign the payment agreement extension form.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button v-if="modalItem.payment_extension?.show_candidate === 1" @click="toggleExtension(modalItem.applicant_id, 1, 1)" class="px-3 py-1.5 bg-lime-500 text-white text-xs font-bold rounded shadow-sm hover:bg-lime-700">Enable</button>
+                    <button v-else @click="toggleExtension(modalItem.applicant_id, 1, 0)" class="px-3 py-1.5 bg-rose-500 text-white text-xs font-bold rounded shadow-sm hover:bg-rose-700">Disable</button>
+                </div>
               </div>
 
-              <div>
+              <div v-if="modalItem.payment_extension?.status === 'submitted'">
+                  <iframe :src="getDynamicUrl(modalItem.payment_extension?.final_signed_pdf)" class="w-full h-64 border rounded-lg shadow-sm"></iframe>
+              </div>
+              <div v-else>
                  <h4 class="text-sm font-bold text-slate-700 mb-3 border-b pb-1">Agreement Details</h4>
+                 
                  <div class="grid grid-cols-2 gap-4 text-sm">
                     <div><label class="block text-xs font-bold text-slate-500 mb-1">First Name</label><input v-model="extensionForm.tenant_first_name" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
                     <div><label class="block text-xs font-bold text-slate-500 mb-1">Last Name</label><input v-model="extensionForm.tenant_last_name" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>

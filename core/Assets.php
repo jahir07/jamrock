@@ -23,7 +23,6 @@ class Assets {
 	 */
 	public function __construct() {
 		add_action( 'wp_enqueue_scripts', array( $this, 'frontend_register' ), 5 );
-		add_action( 'enqueue_block_assets', array( $this, 'enqueue_block_script' ) );
 	}
 
 	/**
@@ -174,29 +173,5 @@ class Assets {
 		);
 
 		return $scripts;
-	}
-
-	/**
-	 * Enqueue styles and scripts for block editor and frontend.
-	 *
-	 * @return void
-	 */
-	public function enqueue_block_script() {
-		// Styles with explicit version numbers.
-		wp_enqueue_style(
-			'jamrock-blocks',
-			JRJ_ASSETS . '/blocks/index.css',
-			array(),
-			JRJ_VERSION
-		);
-
-		// Plain frontend JS (registered elsewhere, enqueued here).
-		wp_enqueue_script(
-			'jamrock-frontend',
-			'',
-			array(),
-			JRJ_VERSION,
-			true      // load in footer.
-		);
 	}
 }

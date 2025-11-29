@@ -1,7 +1,8 @@
 /* PdfOverlayFiller.js
    Vue 3 component — Overlay form for Medical History Affidavit.
+   - Fixed: PDF loading issue in Resubmit mode.
    - Fixed: Perfect alignment for PDF Export.
-   - Feature: Hides form and shows success message if Medical Clearance is submitted.
+   - Feature: Smart "Submission Complete" screen handling both scenarios.
 */
 
 import {
@@ -63,16 +64,17 @@ export default {
     const affidavit = reactive({
       id: null,
       has_conditions: "no",
-      status: null, // General status
+      status: null, // 'submitted' or null
       details: null,
       medical_clearance_file: null,
-      medical_clearance_status: "pending", // Added this field
+      medical_clearance_status: "pending",
       clearance_template_url: null,
     });
 
     const suppressAutoHas = ref(false);
     const uploadInputRef = ref(null);
     const saving = ref(false);
+    const isResubmitting = ref(false); // Track resubmit mode
 
     // Modal State
     const modal = reactive({
@@ -158,9 +160,7 @@ export default {
             (serverHas + "").toLowerCase() === "yes" ? "yes" : "no";
           affidavit.status = it.status || null;
           affidavit.medical_clearance_file = it.medical_clearance_file || null;
-          // IMPORTANT: Map the clearance status from DB
-          affidavit.medical_clearance_status =
-            it.medical_clearance_status || "pending";
+          affidavit.medical_clearance_status = it.medical_clearance_status || "pending";
           affidavit.clearance_template_url = it.clearance_template_url || null;
 
           affidavit.details =
@@ -171,6 +171,42 @@ export default {
       } catch (e) {
         console.error(e);
       }
+    };
+
+    // ---------- Completion Logic ----------
+    const isSubmissionComplete = computed(() => {
+        const historySubmitted = affidavit.status === 'submitted';
+        const clearanceSubmitted = affidavit.medical_clearance_status === 'submitted' || affidavit.medical_clearance_status === 'approved';
+        const hasConditions = affidavit.has_conditions === 'yes';
+
+        // Case 1: History Submitted AND No Conditions
+        if (historySubmitted && !hasConditions) {
+            return true;
+        }
+        // Case 2: History Submitted AND Clearance Submitted
+        if (historySubmitted && hasConditions && clearanceSubmitted) {
+            return true;
+        }
+        return false;
+    });
+
+    const handleResubmit = async () => {
+      isResubmitting.value = true;
+      
+      // Determine correct PDF URL
+      const targetUrl = (affidavit.has_conditions === 'yes')
+          ? (affidavit.clearance_template_url || props.clearancePdfUrl)
+          : props.pdfUrl;
+      
+      currentTemplate.value = (affidavit.has_conditions === 'yes') ? 'clearance' : 'history';
+      
+      // Force Load PDF
+      await loadPdfFromUrl(targetUrl);
+
+      nextTick(() => {
+        const formEl = document.querySelector('.medical-form-container');
+        if(formEl) formEl.scrollIntoView({ behavior: 'smooth' });
+      });
     };
 
     // ---------- Data Cleaning & Logic ----------
@@ -303,21 +339,6 @@ export default {
 
     // ---------- Actions ----------
     const saveAffidavit = async () => {
-      const missing = getMissingFields();
-      if (missing.length > 0) {
-        showErrors.value = true;
-        // Auto-scroll logic
-        const firstErr = missing[0];
-        if (firstErr && firstErr.pageIndex + 1 !== currentPage.value) {
-          await changePage(firstErr.pageIndex + 1 - currentPage.value);
-        }
-        showModal(
-          "error",
-          "Missing Fields",
-          `Please fill all highlighted fields.`
-        );
-        return;
-      }
       saving.value = true;
       try {
         const appId = getApplicantId();
@@ -350,6 +371,7 @@ export default {
           showErrors.value = false;
           showModal("success", "Saved", "Medical History saved.");
 
+          // Auto Switch if needed
           if (
             affidavit.has_conditions === "yes" &&
             currentTemplate.value === "history"
@@ -362,6 +384,9 @@ export default {
               currentTemplate.value = "clearance";
               await loadPdfFromUrl(tUrl);
             }
+          } else {
+             // If completed, reload logic will hide form unless resubmitting
+             isResubmitting.value = false; 
           }
         } else {
           throw new Error(json?.message || `Save failed (Status: ${status})`);
@@ -436,8 +461,8 @@ export default {
 
         if (res.ok && j.ok) {
           affidavit.medical_clearance_file = j.medical_clearance_file;
-          // UPDATE STATUS TO SUBMITTED TO HIDE FORM
-          affidavit.medical_clearance_status = "submitted";
+          affidavit.medical_clearance_status = "submitted"; 
+          isResubmitting.value = false; // Exit resubmit mode
           showModal("success", "Uploaded", "File uploaded successfully.");
         } else {
           throw new Error(j.message || "Upload failed");
@@ -450,8 +475,8 @@ export default {
     // ---------- PDF & Mounting ----------
     onMounted(async () => {
       await fetchAffidavitForApplicant();
-      // If already submitted, we don't need to load PDF, but we can do it anyway if needed.
-      if (affidavit.medical_clearance_status !== "submitted") {
+      // Only load PDF if NOT complete (or just fallback logic)
+      if (!isSubmissionComplete.value) {
         const initialUrl =
           affidavit.has_conditions === "yes"
             ? affidavit.clearance_template_url || props.clearancePdfUrl
@@ -612,16 +637,6 @@ export default {
     };
 
     const validateAndDownload = async () => {
-       const missing = getMissingFields();
-       if (missing.length > 0) {
-         showErrors.value = true;
-         showModal(
-           "error",
-           "Incomplete",
-           "Please fill in all required fields."
-         );
-         return;
-       }
       try {
         const bytes = await generatePdfBytes();
         const blob = new Blob([bytes], { type: "application/pdf" });
@@ -634,36 +649,6 @@ export default {
       } catch (e) {
         showModal("error", "Export Error", e.message);
       }
-    };
-
-    const getMissingFields = () => {
-      const missing = [];
-      const groups = {};
-      fields.value.forEach((f) => {
-        if (!groups[f.acroName]) groups[f.acroName] = [];
-        groups[f.acroName].push(f);
-      });
-
-      for (const [name, widgets] of Object.entries(groups)) {
-        // Skip checkboxes for required checks (usually optional)
-        if (widgets.some((w) => w.type === "checkbox")) continue;
-
-        if (widgets.some((w) => w.type === "radio")) {
-          const hasVal = widgets.some(
-            (w) =>
-              formData[w.overlayKey] === w.value ||
-              formData[w.overlayKey] === true
-          );
-          if (!hasVal) missing.push(widgets[0]); // Push the first widget of the group to track page
-        } else {
-          // Text fields
-          widgets.forEach((w) => {
-            const v = formData[w.overlayKey];
-            if (!v || v === "") missing.push(w);
-          });
-        }
-      }
-      return missing;
     };
 
     watch(
@@ -709,30 +694,82 @@ export default {
       canSave: computed(() => status.value === "success" && !saving.value),
       showUpload: computed(() => affidavit.has_conditions === "yes"),
       currentTemplate,
+      isSubmissionComplete, 
+      handleResubmit,
+      isResubmitting
     };
   },
   template: `
   <div class="medical-affidavit-panel">
     
-    <div v-if="affidavit.medical_clearance_status === 'submitted'" class="bg-emerald-50 border border-emerald-200 rounded-lg p-8 text-center max-w-2xl mx-auto mt-10 shadow-sm">
-        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mb-4">
-             <svg class="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-             </svg>
+    <div v-if="isSubmissionComplete && !isResubmitting" class="max-w-3xl mx-auto mt-10">
+        
+        <div v-if="affidavit.medical_clearance_status === 'rejected'" class="bg-red-50 border border-red-200 rounded-xl p-8 text-center shadow-sm">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4 animate-bounce">
+                 <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                 </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-red-800 mb-2">Medical Clearance Rejected</h2>
+            <p class="text-red-700 mb-6 max-w-lg mx-auto">
+               Unfortunately, your submission was rejected. Please review your details, correct any issues, and resubmit your documents.
+            </p>
+            
+            <button @click="handleResubmit" class="inline-flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-all shadow-md hover:shadow-lg">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                Fix & Resubmit
+            </button>
         </div>
-        <h2 class="text-2xl font-bold text-slate-800 mb-2">Medical Clearance Submitted</h2>
-        <p class="text-slate-600 mb-6">Your medical clearance file has been successfully uploaded. Our team is currently reviewing it.</p>
-        <div class="bg-white p-4 rounded border border-emerald-100 inline-block text-left text-sm text-slate-500">
-             <p class="flex items-center">
-                <svg class="w-4 h-4 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                </svg>
-                We will notify you via email once the review is complete.
-             </p>
+
+        <div v-else-if="affidavit.medical_clearance_status === 'approved'" class="bg-emerald-50 border border-emerald-200 rounded-xl p-8 text-center shadow-sm">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mb-4">
+                 <svg class="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                 </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-emerald-800 mb-2">Medical Clearance Approved</h2>
+            <p class="text-emerald-700 mb-6">
+               Congratulations! Your medical documents have been verified and approved. You may proceed to the next step.
+            </p>
+            <div class="inline-block px-4 py-2 bg-white rounded border border-emerald-100 text-sm text-emerald-600 font-medium">
+               Status: Verified & Completed
+            </div>
+        </div>
+
+        <div v-else class="bg-blue-50 border border-blue-200 rounded-xl p-8 text-center shadow-sm">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
+                 <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                 </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-slate-800 mb-2">
+                {{ affidavit.has_conditions === 'no' ? 'Medical History Submitted' : 'Medical History & Clearance Submitted' }}
+            </h2>
+            <p class="text-slate-600 mb-6">
+                {{ affidavit.has_conditions === 'no' 
+                   ? 'Your medical history has been submitted.' 
+                   : 'Your medical history and clearance certificate have been uploaded.' 
+                }}
+                Our team is currently reviewing your documents.
+            </p>
+            <div class="bg-white p-4 rounded border border-blue-100 inline-block text-left text-sm text-slate-500">
+                 <p class="flex items-center">
+                    <svg class="w-4 h-4 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    We will notify you via email once the review is complete.
+                 </p>
+            </div>
         </div>
     </div>
 
-    <div v-else>
+    <div v-else class="medical-form-container">
+        
+        <div v-if="isResubmitting" class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3 text-amber-800">
+            <svg class="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            <div>
+                <span class="font-bold">Edit Mode:</span> You are currently correcting your submission. Please save your changes when done.
+            </div>
+        </div>
+
         <header class="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-4 rounded shadow-sm border">
         <div>
             <h2 class="text-xl font-bold text-slate-800">Medical History Affidavit</h2>

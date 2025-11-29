@@ -294,6 +294,7 @@ class Installer {
 			`rejection_reason` TEXT NULL,
 			`notes` TEXT NULL,
 			`payment_extension` LONGTEXT NULL,
+			`payment_extension_status` VARCHAR(50) DEFAULT NULL,
 			`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			`updated_at` DATETIME NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
 			PRIMARY KEY (`id`),

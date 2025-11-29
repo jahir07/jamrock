@@ -97674,7 +97674,7 @@ const CandidateProfile = {
     // checks currentApp first, then items array for any enabled extension
     const hasExtension = (0,vue__WEBPACK_IMPORTED_MODULE_0__.computed)(() => {
       // check current application
-      const ext1 = parsePaymentExtension(currentApp.value?.payment_extension).agreement_enable;
+      const ext1 = parsePaymentExtension(currentApp.value?.payment_extension).show_candidate;
       // const ext1 = currentApp.value?.extension_enabled;
 
       if (ext1 && Number(ext1) === 1) return true;
@@ -98737,8 +98737,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var pdf_lib__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! pdf-lib */ "../../node_modules/.pnpm/pdf-lib@1.17.1/node_modules/pdf-lib/es/index.js");
 /* PdfOverlayFiller.js
    Vue 3 component — Overlay form for Medical History Affidavit.
+   - Fixed: PDF loading issue in Resubmit mode.
    - Fixed: Perfect alignment for PDF Export.
-   - Feature: Hides form and shows success message if Medical Clearance is submitted.
+   - Feature: Smart "Submission Complete" screen handling both scenarios.
 */
 
 
@@ -98788,16 +98789,16 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
       id: null,
       has_conditions: "no",
       status: null,
-      // General status
+      // 'submitted' or null
       details: null,
       medical_clearance_file: null,
       medical_clearance_status: "pending",
-      // Added this field
       clearance_template_url: null
     });
     const suppressAutoHas = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(false);
     const uploadInputRef = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(null);
     const saving = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(false);
+    const isResubmitting = (0,vue__WEBPACK_IMPORTED_MODULE_0__.ref)(false); // Track resubmit mode
 
     // Modal State
     const modal = (0,vue__WEBPACK_IMPORTED_MODULE_0__.reactive)({
@@ -98882,7 +98883,6 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
           affidavit.has_conditions = (serverHas + "").toLowerCase() === "yes" ? "yes" : "no";
           affidavit.status = it.status || null;
           affidavit.medical_clearance_file = it.medical_clearance_file || null;
-          // IMPORTANT: Map the clearance status from DB
           affidavit.medical_clearance_status = it.medical_clearance_status || "pending";
           affidavit.clearance_template_url = it.clearance_template_url || null;
           affidavit.details = typeof it.details === "string" ? JSON.parse(it.details || "{}") : it.details;
@@ -98890,6 +98890,39 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
       } catch (e) {
         console.error(e);
       }
+    };
+
+    // ---------- Completion Logic ----------
+    const isSubmissionComplete = (0,vue__WEBPACK_IMPORTED_MODULE_0__.computed)(() => {
+      const historySubmitted = affidavit.status === 'submitted';
+      const clearanceSubmitted = affidavit.medical_clearance_status === 'submitted' || affidavit.medical_clearance_status === 'approved';
+      const hasConditions = affidavit.has_conditions === 'yes';
+
+      // Case 1: History Submitted AND No Conditions
+      if (historySubmitted && !hasConditions) {
+        return true;
+      }
+      // Case 2: History Submitted AND Clearance Submitted
+      if (historySubmitted && hasConditions && clearanceSubmitted) {
+        return true;
+      }
+      return false;
+    });
+    const handleResubmit = async () => {
+      isResubmitting.value = true;
+
+      // Determine correct PDF URL
+      const targetUrl = affidavit.has_conditions === 'yes' ? affidavit.clearance_template_url || props.clearancePdfUrl : props.pdfUrl;
+      currentTemplate.value = affidavit.has_conditions === 'yes' ? 'clearance' : 'history';
+
+      // Force Load PDF
+      await loadPdfFromUrl(targetUrl);
+      (0,vue__WEBPACK_IMPORTED_MODULE_0__.nextTick)(() => {
+        const formEl = document.querySelector('.medical-form-container');
+        if (formEl) formEl.scrollIntoView({
+          behavior: 'smooth'
+        });
+      });
     };
 
     // ---------- Data Cleaning & Logic ----------
@@ -98989,17 +99022,6 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
 
     // ---------- Actions ----------
     const saveAffidavit = async () => {
-      const missing = getMissingFields();
-      if (missing.length > 0) {
-        showErrors.value = true;
-        // Auto-scroll logic
-        const firstErr = missing[0];
-        if (firstErr && firstErr.pageIndex + 1 !== currentPage.value) {
-          await changePage(firstErr.pageIndex + 1 - currentPage.value);
-        }
-        showModal("error", "Missing Fields", `Please fill all highlighted fields.`);
-        return;
-      }
       saving.value = true;
       try {
         const appId = getApplicantId();
@@ -99034,12 +99056,17 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
           affidavit.details.medical_history = cleanData;
           showErrors.value = false;
           showModal("success", "Saved", "Medical History saved.");
+
+          // Auto Switch if needed
           if (affidavit.has_conditions === "yes" && currentTemplate.value === "history") {
             const tUrl = affidavit.clearance_template_url || props.clearancePdfUrl || props.pdfUrl;
             if (tUrl) {
               currentTemplate.value = "clearance";
               await loadPdfFromUrl(tUrl);
             }
+          } else {
+            // If completed, reload logic will hide form unless resubmitting
+            isResubmitting.value = false;
           }
         } else {
           throw new Error(json?.message || `Save failed (Status: ${status})`);
@@ -99109,8 +99136,8 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
         const j = await res.json();
         if (res.ok && j.ok) {
           affidavit.medical_clearance_file = j.medical_clearance_file;
-          // UPDATE STATUS TO SUBMITTED TO HIDE FORM
           affidavit.medical_clearance_status = "submitted";
+          isResubmitting.value = false; // Exit resubmit mode
           showModal("success", "Uploaded", "File uploaded successfully.");
         } else {
           throw new Error(j.message || "Upload failed");
@@ -99123,8 +99150,8 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
     // ---------- PDF & Mounting ----------
     (0,vue__WEBPACK_IMPORTED_MODULE_0__.onMounted)(async () => {
       await fetchAffidavitForApplicant();
-      // If already submitted, we don't need to load PDF, but we can do it anyway if needed.
-      if (affidavit.medical_clearance_status !== "submitted") {
+      // Only load PDF if NOT complete (or just fallback logic)
+      if (!isSubmissionComplete.value) {
         const initialUrl = affidavit.has_conditions === "yes" ? affidavit.clearance_template_url || props.clearancePdfUrl : props.pdfUrl;
         currentTemplate.value = affidavit.has_conditions === "yes" ? "clearance" : "history";
         await loadPdfFromUrl(initialUrl);
@@ -99276,12 +99303,6 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
       return await pdfDoc.save();
     };
     const validateAndDownload = async () => {
-      const missing = getMissingFields();
-      if (missing.length > 0) {
-        showErrors.value = true;
-        showModal("error", "Incomplete", "Please fill in all required fields.");
-        return;
-      }
       try {
         const bytes = await generatePdfBytes();
         const blob = new Blob([bytes], {
@@ -99295,29 +99316,6 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
       } catch (e) {
         showModal("error", "Export Error", e.message);
       }
-    };
-    const getMissingFields = () => {
-      const missing = [];
-      const groups = {};
-      fields.value.forEach(f => {
-        if (!groups[f.acroName]) groups[f.acroName] = [];
-        groups[f.acroName].push(f);
-      });
-      for (const [name, widgets] of Object.entries(groups)) {
-        // Skip checkboxes for required checks (usually optional)
-        if (widgets.some(w => w.type === "checkbox")) continue;
-        if (widgets.some(w => w.type === "radio")) {
-          const hasVal = widgets.some(w => formData[w.overlayKey] === w.value || formData[w.overlayKey] === true);
-          if (!hasVal) missing.push(widgets[0]); // Push the first widget of the group to track page
-        } else {
-          // Text fields
-          widgets.forEach(w => {
-            const v = formData[w.overlayKey];
-            if (!v || v === "") missing.push(w);
-          });
-        }
-      }
-      return missing;
     };
     (0,vue__WEBPACK_IMPORTED_MODULE_0__.watch)([fields, formData], () => {
       if (suppressAutoHas.value) return;
@@ -99357,31 +99355,83 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
       pdfLoaded: (0,vue__WEBPACK_IMPORTED_MODULE_0__.computed)(() => status.value === "success"),
       canSave: (0,vue__WEBPACK_IMPORTED_MODULE_0__.computed)(() => status.value === "success" && !saving.value),
       showUpload: (0,vue__WEBPACK_IMPORTED_MODULE_0__.computed)(() => affidavit.has_conditions === "yes"),
-      currentTemplate
+      currentTemplate,
+      isSubmissionComplete,
+      handleResubmit,
+      isResubmitting
     };
   },
   template: `
   <div class="medical-affidavit-panel">
     
-    <div v-if="affidavit.medical_clearance_status === 'submitted'" class="bg-emerald-50 border border-emerald-200 rounded-lg p-8 text-center max-w-2xl mx-auto mt-10 shadow-sm">
-        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mb-4">
-             <svg class="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-             </svg>
+    <div v-if="isSubmissionComplete && !isResubmitting" class="max-w-3xl mx-auto mt-10">
+        
+        <div v-if="affidavit.medical_clearance_status === 'rejected'" class="bg-red-50 border border-red-200 rounded-xl p-8 text-center shadow-sm">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4 animate-bounce">
+                 <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                 </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-red-800 mb-2">Medical Clearance Rejected</h2>
+            <p class="text-red-700 mb-6 max-w-lg mx-auto">
+               Unfortunately, your submission was rejected. Please review your details, correct any issues, and resubmit your documents.
+            </p>
+            
+            <button @click="handleResubmit" class="inline-flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-all shadow-md hover:shadow-lg">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                Fix & Resubmit
+            </button>
         </div>
-        <h2 class="text-2xl font-bold text-slate-800 mb-2">Medical Clearance Submitted</h2>
-        <p class="text-slate-600 mb-6">Your medical clearance file has been successfully uploaded. Our team is currently reviewing it.</p>
-        <div class="bg-white p-4 rounded border border-emerald-100 inline-block text-left text-sm text-slate-500">
-             <p class="flex items-center">
-                <svg class="w-4 h-4 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                </svg>
-                We will notify you via email once the review is complete.
-             </p>
+
+        <div v-else-if="affidavit.medical_clearance_status === 'approved'" class="bg-emerald-50 border border-emerald-200 rounded-xl p-8 text-center shadow-sm">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mb-4">
+                 <svg class="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                 </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-emerald-800 mb-2">Medical Clearance Approved</h2>
+            <p class="text-emerald-700 mb-6">
+               Congratulations! Your medical documents have been verified and approved. You may proceed to the next step.
+            </p>
+            <div class="inline-block px-4 py-2 bg-white rounded border border-emerald-100 text-sm text-emerald-600 font-medium">
+               Status: Verified & Completed
+            </div>
+        </div>
+
+        <div v-else class="bg-blue-50 border border-blue-200 rounded-xl p-8 text-center shadow-sm">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 mb-4">
+                 <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                 </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-slate-800 mb-2">
+                {{ affidavit.has_conditions === 'no' ? 'Medical History Submitted' : 'Medical History & Clearance Submitted' }}
+            </h2>
+            <p class="text-slate-600 mb-6">
+                {{ affidavit.has_conditions === 'no' 
+                   ? 'Your medical history has been submitted.' 
+                   : 'Your medical history and clearance certificate have been uploaded.' 
+                }}
+                Our team is currently reviewing your documents.
+            </p>
+            <div class="bg-white p-4 rounded border border-blue-100 inline-block text-left text-sm text-slate-500">
+                 <p class="flex items-center">
+                    <svg class="w-4 h-4 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    We will notify you via email once the review is complete.
+                 </p>
+            </div>
         </div>
     </div>
 
-    <div v-else>
+    <div v-else class="medical-form-container">
+        
+        <div v-if="isResubmitting" class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3 text-amber-800">
+            <svg class="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            <div>
+                <span class="font-bold">Edit Mode:</span> You are currently correcting your submission. Please save your changes when done.
+            </div>
+        </div>
+
         <header class="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-4 rounded shadow-sm border">
         <div>
             <h2 class="text-xl font-bold text-slate-800">Medical History Affidavit</h2>
@@ -100341,8 +100391,7 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_2__.GlobalWorkerOptions.workerSrc = new URL(
   },
   template: `
   <div class="payment-extension-panel font-sans text-slate-600">
-
-      <div v-if="item.payment_extension && item.payment_extension.status === 'submitted' && !showPanel" 
+    <div v-if="item.payment_extension && item.payment_extension.status === 'submitted' && !showPanel && item.payment_extension_status !== 'rejected'" 
          class="max-w-2xl mx-auto mt-8 bg-white rounded-2xl shadow-xl shadow-emerald-900/5 border border-slate-100 overflow-hidden">
       
       <div class="bg-emerald-50/50 p-8 text-center border-b border-emerald-50">
@@ -100365,15 +100414,45 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_2__.GlobalWorkerOptions.workerSrc = new URL(
              Our finance team is currently reviewing your request. You will receive an email notification once the status changes.
            </div>
         </div>
-
-        <div class="flex justify-center">
-           <button @click="handleResubmitClick" class="group inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-slate-50 transition-all">
-              <svg class="w-4 h-4 text-slate-400 group-hover:text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-              View Document Details
-           </button>
-        </div>
       </div>
     </div>
+
+    <div v-else-if="item.payment_extension && item.payment_extension.status === 'submitted' && !showPanel && item.payment_extension_status === 'approved'" 
+         class="max-w-2xl mx-auto mt-8 bg-white rounded-2xl shadow-xl shadow-emerald-900/5 border border-slate-100 overflow-hidden">
+      
+      <div class="bg-emerald-50/50 p-8 text-center border-b border-emerald-50">
+        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white text-emerald-500 mb-6 shadow-sm ring-8 ring-emerald-50">
+          <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-800 mb-2">Payment Agreement Approved</h2>
+        <p class="text-slate-500 max-w-md mx-auto">Your Payment Extension Agreement has been approved successfully.</p>
+      </div>
+      
+    </div>
+
+    <div v-else-if="item.payment_extension && item.payment_extension.status === 'submitted' && !showPanel && item.payment_extension_status === 'rejected'" class="max-w-2xl mx-auto mt-8 bg-white rounded-2xl shadow-xl shadow-emerald-900/5 border border-slate-100 overflow-hidden">
+      
+      <div class="bg-emerald-50/50 p-8 text-center border-b border-emerald-50">
+        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white text-red-500 mb-6 shadow-sm ring-8 ring-red-50">
+          <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-800 mb-2">Payment Extension Agreement Rejected</h2>
+        <p class="text-red-500 max-w-md mx-auto">Your Payment Extension Agreement has been rejected.</p>
+
+      <div class="flex justify-center pb-4">
+           <button @click="handleResubmitClick" class="group inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-slate-50 transition-all">
+              <svg class="w-4 h-4 text-slate-400 group-hover:text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+              Resubmit Document
+           </button>
+        </div>
+      
+      </div>
+    </div>
+
 
     <div v-if="showPanel" class="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 ring-1 ring-slate-900/5">
       

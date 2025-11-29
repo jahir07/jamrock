@@ -46,7 +46,7 @@ const CandidateProfile = {
       // check current application
       const ext1 = parsePaymentExtension(
         currentApp.value?.payment_extension
-      ).agreement_enable;
+      ).show_candidate;
       // const ext1 = currentApp.value?.extension_enabled;
 
       if (ext1 && Number(ext1) === 1) return true;

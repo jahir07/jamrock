@@ -910,8 +910,7 @@ export default {
 
   template: `
   <div class="payment-extension-panel font-sans text-slate-600">
-
-      <div v-if="item.payment_extension && item.payment_extension.status === 'submitted' && !showPanel" 
+    <div v-if="item.payment_extension && item.payment_extension.status === 'submitted' && !showPanel && item.payment_extension_status !== 'rejected'" 
          class="max-w-2xl mx-auto mt-8 bg-white rounded-2xl shadow-xl shadow-emerald-900/5 border border-slate-100 overflow-hidden">
       
       <div class="bg-emerald-50/50 p-8 text-center border-b border-emerald-50">
@@ -934,15 +933,45 @@ export default {
              Our finance team is currently reviewing your request. You will receive an email notification once the status changes.
            </div>
         </div>
-
-        <div class="flex justify-center">
-           <button @click="handleResubmitClick" class="group inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-slate-50 transition-all">
-              <svg class="w-4 h-4 text-slate-400 group-hover:text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-              View Document Details
-           </button>
-        </div>
       </div>
     </div>
+
+    <div v-else-if="item.payment_extension && item.payment_extension.status === 'submitted' && !showPanel && item.payment_extension_status === 'approved'" 
+         class="max-w-2xl mx-auto mt-8 bg-white rounded-2xl shadow-xl shadow-emerald-900/5 border border-slate-100 overflow-hidden">
+      
+      <div class="bg-emerald-50/50 p-8 text-center border-b border-emerald-50">
+        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white text-emerald-500 mb-6 shadow-sm ring-8 ring-emerald-50">
+          <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-800 mb-2">Payment Agreement Approved</h2>
+        <p class="text-slate-500 max-w-md mx-auto">Your Payment Extension Agreement has been approved successfully.</p>
+      </div>
+      
+    </div>
+
+    <div v-else-if="item.payment_extension && item.payment_extension.status === 'submitted' && !showPanel && item.payment_extension_status === 'rejected'" class="max-w-2xl mx-auto mt-8 bg-white rounded-2xl shadow-xl shadow-emerald-900/5 border border-slate-100 overflow-hidden">
+      
+      <div class="bg-emerald-50/50 p-8 text-center border-b border-emerald-50">
+        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white text-red-500 mb-6 shadow-sm ring-8 ring-red-50">
+          <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-800 mb-2">Payment Extension Agreement Rejected</h2>
+        <p class="text-red-500 max-w-md mx-auto">Your Payment Extension Agreement has been rejected.</p>
+
+      <div class="flex justify-center pb-4">
+           <button @click="handleResubmitClick" class="group inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-slate-50 transition-all">
+              <svg class="w-4 h-4 text-slate-400 group-hover:text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+              Resubmit Document
+           </button>
+        </div>
+      
+      </div>
+    </div>
+
 
     <div v-if="showPanel" class="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 ring-1 ring-slate-900/5">
       
