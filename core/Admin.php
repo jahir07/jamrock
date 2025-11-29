@@ -131,7 +131,7 @@ class Admin {
 
 		wp_enqueue_style(
 			'jrj-admin',
-			JRJ_ASSETS . '/admin/index.css',
+			JRJ_ASSETS . '/admin/admin.css',
 			array(),
 			$asset['version']
 		);

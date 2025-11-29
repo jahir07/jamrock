@@ -303,6 +303,21 @@ export default {
 
     // ---------- Actions ----------
     const saveAffidavit = async () => {
+      const missing = getMissingFields();
+      if (missing.length > 0) {
+        showErrors.value = true;
+        // Auto-scroll logic
+        const firstErr = missing[0];
+        if (firstErr && firstErr.pageIndex + 1 !== currentPage.value) {
+          await changePage(firstErr.pageIndex + 1 - currentPage.value);
+        }
+        showModal(
+          "error",
+          "Missing Fields",
+          `Please fill all highlighted fields.`
+        );
+        return;
+      }
       saving.value = true;
       try {
         const appId = getApplicantId();
@@ -597,6 +612,16 @@ export default {
     };
 
     const validateAndDownload = async () => {
+       const missing = getMissingFields();
+       if (missing.length > 0) {
+         showErrors.value = true;
+         showModal(
+           "error",
+           "Incomplete",
+           "Please fill in all required fields."
+         );
+         return;
+       }
       try {
         const bytes = await generatePdfBytes();
         const blob = new Blob([bytes], { type: "application/pdf" });
@@ -609,6 +634,36 @@ export default {
       } catch (e) {
         showModal("error", "Export Error", e.message);
       }
+    };
+
+    const getMissingFields = () => {
+      const missing = [];
+      const groups = {};
+      fields.value.forEach((f) => {
+        if (!groups[f.acroName]) groups[f.acroName] = [];
+        groups[f.acroName].push(f);
+      });
+
+      for (const [name, widgets] of Object.entries(groups)) {
+        // Skip checkboxes for required checks (usually optional)
+        if (widgets.some((w) => w.type === "checkbox")) continue;
+
+        if (widgets.some((w) => w.type === "radio")) {
+          const hasVal = widgets.some(
+            (w) =>
+              formData[w.overlayKey] === w.value ||
+              formData[w.overlayKey] === true
+          );
+          if (!hasVal) missing.push(widgets[0]); // Push the first widget of the group to track page
+        } else {
+          // Text fields
+          widgets.forEach((w) => {
+            const v = formData[w.overlayKey];
+            if (!v || v === "") missing.push(w);
+          });
+        }
+      }
+      return missing;
     };
 
     watch(

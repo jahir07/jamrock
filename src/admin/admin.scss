@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 .jrj-admin .nav-tab {
     cursor: pointer;
 }
@@ -253,22 +257,14 @@
     justify-content: center;
 }
 
-.grid {
-    display: flex;
-    gap: 20px;
-    justify-content: space-between;
-    max-width: 900px;
-    flex-wrap: wrap;
-}
-
-.grid .panel {
+.panel {
     flex: 1 1 260px;
     padding: 10px;
     border: 1px solid #ccc;
     border-radius: 8px;
 }
 
-.grid .panel h4 {
+.panel h4 {
     margin-top: 0;
 }
 

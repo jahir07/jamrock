@@ -4,7 +4,8 @@ import {
 	onMounted,
 	onBeforeUnmount,
 } from 'vue/dist/vue.esm-bundler.js';
-import './index.scss';
+
+import './admin.scss';
 
 import Dashboard from './components/Dashboard.js';
 import SettingsPage from "./components/SettingsPage.js";
@@ -22,8 +23,7 @@ const InfoPage = {
 			<p>Use these shortcodes in pages/posts:</p>
 			<ul>
 				<li><code>[jamrock_learndash_dashboard]</code> — renders the jamrock_learndash_dashboard</li>
-				<li><code>[jamrock_form]</code> — renders the feedback form</li>
-				<li><code>[jamrock_results]</code> — list results (admins only)</li>
+        <li><code>.. coming soon</li>
 			</ul>
 			<p>Blocks are also available in the editor: <strong>Feedback Form</strong> and <strong>Feedback Result</strong>.</p>
 		</div>

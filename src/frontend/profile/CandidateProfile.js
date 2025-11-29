@@ -44,9 +44,9 @@ const CandidateProfile = {
     // checks currentApp first, then items array for any enabled extension
     const hasExtension = computed(() => {
       // check current application
-      const ext1 =
-        parsePaymentExtension(currentApp.value?.payment_extension)
-          .extension_enabled;
+      const ext1 = parsePaymentExtension(
+        currentApp.value?.payment_extension
+      ).agreement_enable;
       // const ext1 = currentApp.value?.extension_enabled;
 
       if (ext1 && Number(ext1) === 1) return true;

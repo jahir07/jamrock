@@ -1,5 +1,5 @@
 /* global JRJ_ADMIN */
-import { ref, reactive, onMounted } from "vue/dist/vue.esm-bundler.js";
+import { ref, reactive, onMounted } from "vue";
 
 function safeParseJson(v) {
   if (!v) return null;
@@ -20,43 +20,36 @@ export default {
     const perPage = ref(10);
     const loading = ref(false);
 
-    // notice state + timeout handle
-    const notice = reactive({
-      show: false,
-      type: "success",
-      message: "",
-    });
+    // Filters
+    const filter = reactive({ status: "", extension_status: "" });
+
+    // UI State
+    const activeTab = ref("history"); // for medical modal
+
+    // Notice System
+    const notice = reactive({ show: false, type: "success", message: "" });
     let noticeTimer = null;
     function showNotice(type, msg, ms = 4000) {
-      if (noticeTimer) {
-        clearTimeout(noticeTimer);
-        noticeTimer = null;
-      }
+      if (noticeTimer) clearTimeout(noticeTimer);
       notice.type = type;
       notice.message = msg;
       notice.show = true;
-      noticeTimer = setTimeout(() => {
-        notice.show = false;
-        noticeTimer = null;
-      }, ms);
+      noticeTimer = setTimeout(() => (notice.show = false), ms);
     }
 
-    // filters
-    const filter = reactive({ status: "", extension_status: "" });
+    // Modals
+    const modalOpen = ref(false); // Housing Details
+    const medicalModalOpen = ref(false); // Medical Details
+    const extensionModalOpen = ref(false); // Payment Extension
 
-    // main modal
-    const modalOpen = ref(false);
-    const modalItem = ref(null);
+    const modalItem = ref(null); // Active Item context
+    const medicalItem = ref(null); // Medical data
     const modalLoading = ref(false);
-    const modalRejection = ref(""); // rejection reason input
-
-    // extension modal (separate)
-    const extensionModalOpen = ref(false);
+    const modalRejection = ref("");
     const extensionModalLoading = ref(false);
 
-    // Prefill inputs for acro fields and extension meta
+    // Extension Form Data
     const extensionForm = reactive({
-      // acro fields mapping (these keys correspond to your AcroForm mapping)
       tenant_first_name: "",
       tenant_last_name: "",
       rental_address: "",
@@ -64,12 +57,12 @@ export default {
       tenant_email: "",
       due_on: "",
       signed_date: "",
-      // extension meta
       extended_until: "",
       note: "",
       enabled: 0,
     });
 
+    // --- Load List ---
     const load = async () => {
       loading.value = true;
       try {
@@ -80,140 +73,170 @@ export default {
           extension_status: filter.extension_status || "",
         });
 
-        const url = `${JRJ_ADMIN.root}housing/applicants?${q.toString()}`;
-        const res = await fetch(url, {
-          method: "GET",
-          credentials: "same-origin",
+        const res = await fetch(`${JRJ_ADMIN.root}housing/applicants?${q}`, {
           headers: { "X-WP-Nonce": JRJ_ADMIN.nonce },
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || `HTTP ${res.status}`);
-        }
-
         const json = await res.json();
-        items.value = json.items || json.data || [];
-
-        const totalHeader = res.headers.get("X-WP-Total");
-        total.value = totalHeader
-          ? parseInt(totalHeader, 10)
-          : json.total || json.count || 0;
+        if (json.ok) {
+          items.value = json.items || [];
+          total.value = json.total || 0;
+        }
       } catch (e) {
-        console.error("housing list load error", e);
-        showNotice("error", "Failed to load housing list: " + (e.message || e));
+        showNotice("error", "Error loading list");
       } finally {
         loading.value = false;
       }
     };
 
-    async function openDetail(id) {
+    // --- Housing Detail Logic ---
+    const openDetail = async (id) => {
       modalOpen.value = true;
-      modalItem.value = null;
-      modalRejection.value = "";
       modalLoading.value = true;
       try {
         const res = await fetch(`${JRJ_ADMIN.root}housing/applicants/${id}`, {
-          method: "GET",
-          credentials: "same-origin",
           headers: { "X-WP-Nonce": JRJ_ADMIN.nonce },
         });
-        if (!res.ok) throw new Error("HTTP " + res.status);
         const json = await res.json();
-        if (!json.ok) throw new Error(json.error || "no item");
-
-        const it = json.item || {};
-
-        // parse JSON fields if they are stored as strings
-        it.for_rental = safeParseJson(it.for_rental) || it.for_rental || null;
-        it.for_verification =
-          safeParseJson(it.for_verification) || it.for_verification || null;
-        it.payment_extension =
-          safeParseJson(it.payment_extension) || it.payment_extension || null;
-        it.fields_json =
-          safeParseJson(it.fields_json) || it.fields_json || null;
-
-        modalItem.value = it;
+        if (json.ok && json.item) {
+          const it = json.item;
+          [
+            "for_rental",
+            "for_verification",
+            "payment_extension",
+            "fields_json",
+          ].forEach((k) => {
+            it[k] = safeParseJson(it[k]);
+          });
+          modalItem.value = it;
+        }
       } catch (e) {
-        showNotice("error", "Failed to fetch detail: " + e.message);
-        modalOpen.value = false;
+        showNotice("error", "Fetch error");
       } finally {
         modalLoading.value = false;
       }
-    }
+    };
 
-    // medical detail
-    async function openMedicalDetail(id) {
-      modalOpen.value = true;
-      modalItem.value = null;
-      modalRejection.value = "";
+    const updateHousingStatus = async (status) => {
+      if (!modalItem.value) return;
+      if (status === "rejected" && !modalRejection.value) {
+        return showNotice("error", "Rejection reason required");
+      }
       modalLoading.value = true;
       try {
-        const res = await fetch(`${JRJ_ADMIN.root}housing/medical/${id}`, {
-          method: "GET",
-          credentials: "same-origin",
-          headers: { "X-WP-Nonce": JRJ_ADMIN.nonce },
-        });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        const json = await res.json();
-        if (!json.ok) throw new Error(json.error || "no item");
-        const it = json.item || {};
-        modalItem.value = it;
-      } catch (e) {
-        showNotice("error", "Failed to fetch medical detail: " + e.message);
-        modalOpen.value = false;
-      } finally {
-        modalLoading.value = false;
-      }
-    }
-
-    // safe accessor for extension enabled
-    function isExtensionEnabled(item) {
-      const p = item.extension_enabled;
-      if (!p) return false;
-      try {
-        return Number(p === "1") ? true : false;
-      } catch (e) {
-        return false;
-      }
-    }
-
-    // Toggle / enable payment extension for an applicant
-    async function toggleExtension(applicantId, enable = 1) {
-      try {
         const body = new URLSearchParams();
-        body.append("enable", enable ? "1" : "0");
+        body.append("status", status);
+        if (status === "rejected")
+          body.append("rejection_reason", modalRejection.value);
 
-        const res = await fetch(
-          `${JRJ_ADMIN.root}housing/applicants/${applicantId}/extension`,
+        await fetch(
+          `${JRJ_ADMIN.root}housing/applicants/${modalItem.value.id}`,
           {
             method: "POST",
-            credentials: "same-origin",
             headers: { "X-WP-Nonce": JRJ_ADMIN.nonce },
             body,
           }
         );
+        showNotice("success", "Status updated");
+        modalOpen.value = false;
+        load();
+      } catch (e) {
+        showNotice("error", e.message);
+      } finally {
+        modalLoading.value = false;
+      }
+    };
 
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok || !j.ok) {
-          throw new Error(j.error || "Failed");
+    // --- Medical Logic ---
+    const openMedicalDetail = async (housingId) => {
+      medicalModalOpen.value = true;
+      modalLoading.value = true;
+      medicalItem.value = null;
+      activeTab.value = "history";
+
+      try {
+        const res = await fetch(
+          `${JRJ_ADMIN.root}housing/applicants/${housingId}/medical`,
+          {
+            headers: { "X-WP-Nonce": JRJ_ADMIN.nonce },
+          }
+        );
+        const json = await res.json();
+        if (json.ok) {
+          medicalItem.value = json.item;
+        } else {
+          showNotice("warning", "No medical record found.");
         }
+      } catch (e) {
+        showNotice("error", "Medical fetch error");
+      } finally {
+        modalLoading.value = false;
+      }
+    };
+
+    const updateMedicalStatus = async (status) => {
+      if (!medicalItem.value) return;
+      modalLoading.value = true;
+      try {
+        const url = `${JRJ_ADMIN.root}housing/medical/${medicalItem.value.id}/status`;
+        const body = new URLSearchParams();
+        body.append("status", status);
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "X-WP-Nonce": JRJ_ADMIN.nonce },
+          body,
+        });
+        const json = await res.json();
+        if (json.ok) {
+          showNotice("success", `Medical Clearance ${status}`);
+          medicalItem.value.medical_clearance_status = status;
+        } else {
+          throw new Error(json.error);
+        }
+      } catch (e) {
+        showNotice("error", "Update failed");
+      } finally {
+        modalLoading.value = false;
+      }
+    };
+
+    // --- Payment Extension Logic ---
+    function isExtensionEnabled(item) {
+      const p = item.extension_enabled;
+      if (!p) return false;
+      return Number(p) === 1;
+    }
+
+    async function toggleExtension(applicantId, enable = 1) {
+      try {
+        const body = new URLSearchParams();
+        body.append("enable", enable ? "1" : "0");
+        const res = await fetch(
+          `${JRJ_ADMIN.root}housing/applicants/${applicantId}/extension`,
+          {
+            method: "POST",
+            headers: { "X-WP-Nonce": JRJ_ADMIN.nonce },
+            body,
+          }
+        );
+        const j = await res.json();
+        if (!res.ok || !j.ok) throw new Error(j.error || "Failed");
 
         await load();
-
         showNotice(
           "success",
-          enable ? "Payment extension enabled." : "Payment extension revoked."
+          enable ? "Extension Enabled." : "Extension Revoked."
         );
       } catch (e) {
-        showNotice("error", e.message || "Toggle failed");
+        showNotice("error", e.message);
       }
     }
 
-    // open extension modal for edit/create
     function openExtensionModal(item) {
       if (!item) return;
-      modalItem.value = item; // also show as context
-      // Clear extensionForm
+      modalItem.value = item;
+
+      // Reset Form
       Object.assign(extensionForm, {
         tenant_first_name: "",
         tenant_last_name: "",
@@ -227,7 +250,7 @@ export default {
         enabled: 0,
       });
 
-      // Source priority: payment_extension.fields_json (if saved) -> item.fields_json -> for_rental -> for_verification -> fallback to item fields
+      // Parse Data Sources
       const ext =
         safeParseJson(item.payment_extension) || item.payment_extension || {};
       const fieldsFromPaymentExt = safeParseJson(ext.fields_json) || {};
@@ -235,20 +258,20 @@ export default {
       const forRental = safeParseJson(item.for_rental) || {};
       const forVerification = safeParseJson(item.for_verification) || {};
 
-      // Fill mapping — these keys match your AcroForm names
+      // Intelligent Mapping (Restored from your code)
       extensionForm.tenant_first_name =
         fieldsFromPaymentExt.tenant_first_name ||
         globalFields.tenant_first_name ||
         forRental.tenant_first_name ||
         forVerification.tenant_first_name ||
-        item.full_name?.split?.(" ")?.[0] ||
+        item.name?.split?.(" ")?.[0] ||
         "";
       extensionForm.tenant_last_name =
         fieldsFromPaymentExt.tenant_last_name ||
         globalFields.tenant_last_name ||
         forRental.tenant_last_name ||
         forVerification.tenant_last_name ||
-        item.full_name?.split?.(" ")?.slice(1).join(" ") ||
+        item.name?.split?.(" ")?.slice(1).join(" ") ||
         "";
       extensionForm.rental_address =
         fieldsFromPaymentExt.rental_address ||
@@ -278,21 +301,17 @@ export default {
       extensionForm.signed_date =
         fieldsFromPaymentExt.date || globalFields.date || "";
 
-      // extension meta
-      extensionForm.extended_until =
-        ext.extended_until || ext.extended_until || "";
+      // Meta
+      extensionForm.extended_until = ext.extended_until || "";
       extensionForm.note = ext.notes || ext.note || "";
       extensionForm.enabled = ext.enabled ? 1 : 0;
 
       extensionModalOpen.value = true;
     }
 
-    // Save extension for applicant: will send fields_json (the acro map) + extension meta
     async function saveExtensionForApplicant(applicantId) {
+      extensionModalLoading.value = true;
       try {
-        extensionModalLoading.value = true;
-
-        // build fields_json object for acroform
         const fields_json_obj = {
           tenant_first_name: extensionForm.tenant_first_name || "",
           tenant_last_name: extensionForm.tenant_last_name || "",
@@ -303,155 +322,81 @@ export default {
           date: extensionForm.signed_date || "",
         };
 
-        const ext_meta = {
-          enabled: 1,
-          extended_until: extensionForm.extended_until || "",
-          notes: extensionForm.note || "",
-          fields_json: fields_json_obj,
-        };
-
         const body = new URLSearchParams();
         body.append("agreement_enable", 1);
-        body.append("extended_until", ext_meta.extended_until || "");
-        body.append("note", ext_meta.notes || "");
-        // send fields json as a string as well (backend should accept it)
+        body.append("extended_until", extensionForm.extended_until || "");
+        body.append("note", extensionForm.note || "");
+        body.append("status", "pending");
         body.append("fields_json", JSON.stringify(fields_json_obj));
 
         const res = await fetch(
           `${JRJ_ADMIN.root}housing/applicants/${applicantId}/extension`,
           {
             method: "POST",
-            credentials: "same-origin",
             headers: { "X-WP-Nonce": JRJ_ADMIN.nonce },
             body,
           }
         );
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok || !j.ok)
-          throw new Error(
-            (j && (j.error || j.message)) || `HTTP ${res.status}`
-          );
+        const j = await res.json();
+        if (!res.ok || !j.ok) throw new Error(j.message || "Failed");
 
-        showNotice("success", "Payment extension saved.");
+        showNotice("success", "Extension saved & agreement enabled.");
         extensionModalOpen.value = false;
         await load();
       } catch (e) {
-        showNotice("error", "Save failed: " + (e.message || e));
+        showNotice("error", e.message);
       } finally {
         extensionModalLoading.value = false;
       }
     }
 
-    // confirm status update (approve/reject/in_progress)
-    async function confirmUpdate(id, status) {
-      if (!modalItem.value) {
-        showNotice("error", "No item loaded.");
-        return;
-      }
-      if (status === "rejected" && !modalRejection.value.trim()) {
-        showNotice("warning", "Please provide a rejection reason.");
-        return;
-      }
-
-      modalLoading.value = true;
-      try {
-        const body = new URLSearchParams();
-        body.append("status", status);
-        if (status === "rejected")
-          body.append("rejection_reason", modalRejection.value);
-
-        const res = await fetch(`${JRJ_ADMIN.root}housing/applicants/${id}`, {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "X-WP-Nonce": JRJ_ADMIN.nonce },
-          body,
-        });
-
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok || !j.ok) {
-          const msg = (j && (j.message || j.error)) || `HTTP ${res.status}`;
-          throw new Error(msg);
-        }
-
-        showNotice("success", "Status updated successfully.");
-        modalOpen.value = false;
-        modalItem.value = null;
-        modalRejection.value = "";
-        await load();
-      } catch (e) {
-        showNotice("error", "Update failed: " + (e.message || e));
-      } finally {
-        modalLoading.value = false;
-      }
-    }
-
-    // Extentions update (approve/reject/in_progress).
-    async function extentionUpdate(id, status) {
-      if (!modalItem.value) {
-        showNotice("error", "No item loaded.");
-        return;
-      }
-      if (status === "rejected" && !extensionForm.note.trim()) {
-        showNotice("warning", "Please provide a rejection reason.");
-        return;
-      }
-
+    async function extensionUpdateStatus(id, status) {
       extensionModalLoading.value = true;
       try {
         const body = new URLSearchParams();
         body.append("status", status);
-        if (status === "rejected")
-          body.append("rejection_reason", extensionForm.note);
-
+        // reusing housing status update logic but context is extension modal
         const res = await fetch(`${JRJ_ADMIN.root}housing/applicants/${id}`, {
           method: "POST",
-          credentials: "same-origin",
           headers: { "X-WP-Nonce": JRJ_ADMIN.nonce },
           body,
         });
+        const j = await res.json();
+        if (!res.ok || !j.ok) throw new Error("Update failed");
 
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok || !j.ok) {
-          const msg = (j && (j.message || j.error)) || `HTTP ${res.status}`;
-          throw new Error(msg);
-        }
-
-        showNotice("success", "Extension status updated successfully.");
+        showNotice("success", "Status updated.");
         extensionModalOpen.value = false;
-        extensionForm.extended_until = "";
-        extensionForm.note = "";
         await load();
       } catch (e) {
-        showNotice("error", "Update failed: " + (e.message || e));
+        showNotice("error", e.message);
       } finally {
         extensionModalLoading.value = false;
       }
     }
 
-    function pretty(k) {
-      return String(k)
-        .replace(/_/g, " ")
-        .replace(/\b\w/g, (l) => l.toUpperCase());
-    }
+    // --- Helpers ---
+    const statusClass = (s) => {
+      if (!s) return "bg-gray-100 text-gray-600";
+      switch (s.toLowerCase()) {
+        case "approved":
+          return "bg-emerald-100 text-emerald-700 border-emerald-200";
+        case "rejected":
+          return "bg-red-100 text-red-700 border-red-200";
+        case "submitted":
+        case "pending":
+          return "bg-amber-100 text-amber-700 border-amber-200";
+        default:
+          return "bg-blue-50 text-blue-600 border-blue-100";
+      }
+    };
 
-    function closeModal() {
-      modalOpen.value = false;
-      modalItem.value = null;
-      modalRejection.value = "";
-      modalLoading.value = false;
-    }
-    function closeExtensionModal() {
-      extensionModalOpen.value = false;
-      extensionForm.extended_until = "";
-      extensionForm.note = "";
-      extensionModalLoading.value = false;
-    }
-
-    function nextDay() {
+    const pretty = (str) =>
+      str.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+    const nextDay = () => {
       const d = new Date();
-      d.setDate(d.getDate() + 1); // next day
+      d.setDate(d.getDate() + 1);
       return d.toISOString().split("T")[0];
-    }
+    };
 
     onMounted(load);
 
@@ -463,237 +408,357 @@ export default {
       loading,
       filter,
       load,
+      // Housing
       modalOpen,
       modalItem,
       modalLoading,
       modalRejection,
       openDetail,
-      confirmUpdate,
-      pretty,
-      notice,
-      showNotice,
-      closeModal,
-      nextDay,
-      // extension stuff
-      toggleExtension,
-      openExtensionModal,
+      updateHousingStatus,
+      // Medical
+      medicalModalOpen,
+      medicalItem,
+      openMedicalDetail,
+      updateMedicalStatus,
+      activeTab,
+      // Extension
       extensionModalOpen,
       extensionForm,
-      saveExtensionForApplicant,
       extensionModalLoading,
-      closeExtensionModal,
+      openExtensionModal,
+      toggleExtension,
+      saveExtensionForApplicant,
       isExtensionEnabled,
-      extentionUpdate,
+      extensionUpdateStatus,
+      // UI
+      notice,
+      showNotice,
+      statusClass,
+      pretty,
+      nextDay,
     };
   },
 
   template: `
-  <div class="jrj-card">
-    <h2>Housing/Rental Applications Panel</h2>
-
-    <div v-if="notice.show"
-        :class="['jrj-notice', 'jrj-' + notice.type]"
-        style="margin-bottom:12px;padding:10px;border-radius:6px;">
-      {{ notice.message }}
-    </div>
-
-    <div class="jrj-toolbar" style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
-      <label>Status
-        <select v-model="filter.status" @change="page=1; load()" style="margin-left:8px;">
-          <option value="">All</option>
+  <div class="p-6 max-w-[1400px] mx-auto font-sans text-slate-600">
+    
+    <div class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+      <div>
+        <h2 class="text-2xl font-bold text-slate-800">Housing & Rental Manager</h2>
+        <p class="text-sm text-slate-500">Manage applications, medical clearances, and payment extensions.</p>
+      </div>
+      
+      <div class="flex flex-wrap gap-3 bg-white p-2 rounded-lg border shadow-sm">
+        <select v-model="filter.status" @change="page=1; load()" class="text-sm border-none bg-slate-50 rounded px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 outline-none">
+          <option value="">All Statuses</option>
           <option value="pending">Pending</option>
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
-          <option value="in_progress">In progress</option>
         </select>
-      </label>
+        
+        <select v-model="filter.extension_status" @change="page=1; load()" class="text-sm border-none bg-slate-50 rounded px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 outline-none">
+          <option value="">Any Extension</option>
+          <option value="enabled">Ext. Enabled</option>
+          <option value="disabled">Ext. Disabled</option>
+        </select>
 
-      <label style="margin-left:12px;">Extension
-        <select v-model="filter.extension_status" @change="page=1; load()" style="margin-left:8px;">
-          <option value="">Any</option>
-          <option value="enabled">Enabled</option>
-          <option value="disabled">Disabled</option>
+        <select v-model.number="perPage" @change="page=1; load()" class="text-sm border-none bg-slate-50 rounded px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 outline-none">
+          <option :value="10">10 / page</option>
+          <option :value="20">20 / page</option>
+          <option :value="50">50 / page</option>
         </select>
-      </label>
-
-      <label style="margin-left:auto;">Per page
-        <select v-model.number="perPage" @change="page=1; load()" style="margin-left:8px;">
-          <option :value="10">10</option>
-          <option :value="20">20</option>
-          <option :value="50">50</option>
-        </select>
-      </label>
+      </div>
     </div>
 
-    <table class="jrj-table" style="width:100%;border-collapse:collapse;">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Housing Need</th>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Status</th>
-          <th>Rental Detail</th>
-          <th>Medical Detail</th>
-          <th>Payment Extension</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-if="loading"><td colspan="8">Loading…</td></tr>
-
-        <tr v-for="r in items" :key="r.id">
-          <td>{{ r.id }}</td>
-          <td>{{ r.need_housing }}</td>
-          <td>{{ r.name || r.full_name || '—' }}</td>
-          <td>{{ r.email || '—' }}</td>
-          <td>{{ r.status }}</td>
-          <td>
-            <button class="button" @click="openDetail(r.id)">Details</button>
-          </td>
-
-          <td>
-            <button class="button" @click="openMedicalDetail(r.id)">Details</button>
-          </td>
-
-          <td>
-            <button v-if="isExtensionEnabled(r)" class="button" style="margin-left:6px"
-              @click="toggleExtension(r.applicant_id, 0)">
-              Revoke
-            </button>
-            <button v-else class="button" style="margin-left:6px"
-              @click="toggleExtension(r.applicant_id, 1)">
-              Enable
-            </button>
-            <button v-if="isExtensionEnabled(r)" class="button" style="margin-left:6px" @click="openExtensionModal(r)">Detail</button>
-          </td>
-        </tr>
-
-        <tr v-if="!loading && items.length===0"><td colspan="8">No items</td></tr>
-      </tbody>
-    </table>
-
-    <div class="jrj-pagination" v-if="total > perPage" style="margin-top:12px;">
-      <button class="button" :disabled="page===1" @click="page--; load()">«</button>
-      <span style="margin:0 12px;">Page {{ page }}</span>
-      <button class="button" :disabled="page * perPage >= total" @click="page++; load()">»</button>
+    <div v-if="notice.show" :class="notice.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'" class="mb-4 p-4 rounded-lg border text-sm font-medium flex items-center gap-2">
+       <span v-if="notice.type==='success'">✓</span><span v-else>⚠️</span>
+       {{ notice.message }}
     </div>
 
-    <!-- main modal for detail -->
-    <div v-if="modalOpen" class="jrj-modal" style="display:block;">
-      <div class="jrj-modal-body">
-        <button class="jrj-modal-close" @click="closeModal()">×</button>
-        <h3>Housing/Rental Application detail</h3>
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <th class="p-4">Applicant</th>
+              <th class="p-4">Contact</th>
+              <th class="p-4">Housing Status</th>
+              <th class="p-4">Housing Actions</th>
+              <th class="p-4">Payment Extension</th>
+              <th class="p-4 text-right">Medical</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-sm">
+            <tr v-if="loading"><td colspan="6" class="p-8 text-center text-slate-400">Loading data...</td></tr>
+            <tr v-else-if="items.length === 0"><td colspan="6" class="p-8 text-center text-slate-400">No applications found.</td></tr>
+            
+            <tr v-else v-for="item in items" :key="item.id" class="hover:bg-slate-50 transition-colors">
+              <td class="p-4">
+                <div class="font-medium text-slate-900">{{ item.name || item.full_name || 'Unknown' }}</div>
+                <div class="text-xs text-slate-400">ID: {{ item.applicant_id }}</div>
+              </td>
+              <td class="p-4 text-slate-500">
+                <div>{{ item.email }}</div>
+                <div class="text-xs">{{ item.phone }}</div>
+              </td>
+              <td class="p-4">
+                <span class="px-2.5 py-1 rounded-full text-xs font-bold border" :class="statusClass(item.status)">
+                  {{ item.status ? item.status.toUpperCase() : 'PENDING' }}
+                </span>
+              </td>
 
-        <div v-if="modalLoading">Loading…</div>
-        <div v-else-if="!modalItem">No data</div>
-        <div v-else>
-          <p><strong>ID:</strong> {{ modalItem.id }} — <strong>User:</strong> {{ modalItem.applicant_id }} / {{ modalItem.name }} ({{ modalItem.email }})</p>
-          <p><strong>Need housing:</strong> {{ modalItem.need_housing }}</p>
-          <p><strong>Status:</strong> {{ modalItem.status }}</p>
-          <p v-if="modalItem.rejection_reason"><strong>Rejection reason:</strong> {{ modalItem.rejection_reason }}</p>
+              <td class="p-4">
+                <button @click="openDetail(item.id)" class="group flex items-end gap-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-white border border-slate-200 px-3 py-1.5 rounded-md shadow-sm hover:border-indigo-300 transition-colors">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                  Manage
+                </button>
+              </td>
 
-          <div v-if="modalItem && modalItem.for_rental">
-            <h4>Rental Data</h4>
-            <div class="pretty-section">
-              <div class="pretty-row" v-for="(value, key) in modalItem.for_rental" :key="key">
-                <div class="pretty-key">{{ pretty(key) }}</div>
-                <div class="pretty-value">{{ value || '—' }}</div>
-              </div>
-            </div>
-          </div>
+              <td class="p-4">
+                 <div class="flex items-center gap-2">
+                    <div v-if="isExtensionEnabled(item)" class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <span class="text-xs font-bold text-emerald-700">Active</span>
+                        <button @click="openExtensionModal(item)" class="text-xs text-blue-600 hover:underline px-3 py-1.5 border bottom-1 border-cyan-500 rounded-md shadow-sm">Manage</button>
+                        <button @click="toggleExtension(item.applicant_id, 0)" class="text-xs text-indigo-600 hover:underline px-3 py-1.5">Disable</button>
+                    </div>
+                    <div v-else class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-slate-300"></span>
+                        <span class="text-xs text-slate-400">Inactive</span>
+                        <button @click="toggleExtension(item.applicant_id, 1)" class="text-xs text-indigo-600 hover:underline px-3 py-1.5">Enable</button>
+                    </div>
+                 </div>
+              </td>
+                
+              <td class="p-4 text-right">
+                 <button @click="openMedicalDetail(item.id)" class="group flex items-end gap-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 transition-colors bg-white border border-slate-200 hover:border-indigo-300 ml-auto px-3 py-1.5 rounded-md shadow-sm">
+                    <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    View Record
+                 </button>
+              </td>
+             
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <div v-if="total > perPage" class="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50">
+         <button :disabled="page===1" @click="page--; load()" class="px-3 py-1 bg-white border rounded disabled:opacity-50 text-xs">Previous</button>
+         <span class="text-xs text-slate-500">Page {{ page }}</span>
+         <button :disabled="page * perPage >= total" @click="page++; load()" class="px-3 py-1 bg-white border rounded disabled:opacity-50 text-xs">Next</button>
+      </div>
+    </div>
 
-          <div v-if="modalItem && modalItem.for_verification" style="margin-top:12px;">
-            <h4>Verification Data</h4>
-            <div class="pretty-section">
-              <div class="pretty-row" v-for="(value, key) in modalItem.for_verification" :key="key">
-                <div class="pretty-key">{{ pretty(key) }}</div>
-                <div class="pretty-value">{{ value || '—' }}</div>
-              </div>
-            </div>
-          </div>
-
+    <div v-if="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" @click.self="modalOpen=false">
+      <div class="bg-white w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <h3 class="text-lg font-bold text-slate-800">Application Details</h3>
+          <button @click="modalOpen=false" class="text-slate-400 hover:text-slate-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
         </div>
+        <div class="p-6 overflow-y-auto space-y-6">
+          <div v-if="modalLoading" class="text-center py-10 text-slate-400">Loading details...</div>
+          <div v-else-if="modalItem">
+             <div class="bg-blue-50/50 p-4 rounded-lg border border-blue-100 grid grid-cols-2 gap-4 text-sm">
+                <div><label class="text-xs text-slate-400 uppercase font-bold">Applicant</label><div class="font-semibold text-slate-800">{{ modalItem.name }}</div></div>
+                <div><label class="text-xs text-slate-400 uppercase font-bold">Email</label><div class="text-slate-700">{{ modalItem.email }}</div></div>
+                <div><label class="text-xs text-slate-400 uppercase font-bold">Housing Need</label><div class="text-slate-700">{{ modalItem.need_housing }}</div></div>
+                <div><label class="text-xs text-slate-400 uppercase font-bold">Status</label><div><span class="px-2 py-0.5 rounded-full text-xs font-bold border" :class="statusClass(modalItem.status)">{{ modalItem.status }}</span></div></div>
+             </div>
+             <div v-if="modalItem.rejection_reason" class="bg-red-50 p-3 rounded border border-red-100 text-sm text-red-800"><strong>Reason:</strong> {{ modalItem.rejection_reason }}</div>
+             
+             <div v-if="modalItem.for_rental" class="space-y-2">
+                <h4 class="text-sm font-bold text-slate-800 border-b pb-1">Rental Data</h4>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                   <div v-for="(val, key) in modalItem.for_rental" :key="key"><span class="text-slate-400 text-xs block">{{ pretty(key) }}</span><span class="text-slate-700">{{ val || '-' }}</span></div>
+                </div>
+             </div>
 
-        <div style="margin-top:12px;">
-          <label>Rejection reason (if rejecting):</label>
-          <textarea v-model="modalRejection" rows="3" style="width:100%"></textarea>
-        </div>
+             <div v-if="modalItem.for_verification" class="space-y-2 pt-4">
+                <h4 class="text-sm font-bold text-slate-800 border-b pb-1">Verification Data</h4>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                   <div v-for="(val, key) in modalItem.for_verification" :key="key"><span class="text-slate-400 text-xs block">{{ pretty(key) }}</span><span class="text-slate-700">{{ val || '-' }}</span></div>
+                </div>
+             </div>
 
-        <div style="margin-top:12px;text-align:right;">
-          <button class="button" @click="confirmUpdate(modalItem.id, 'approved')" :disabled="modalLoading">Approve</button>
-          <button class="button" @click="confirmUpdate(modalItem.id, 'rejected')" :disabled="modalLoading" style="margin-left:8px">Reject</button>
-          <button class="button" @click="confirmUpdate(modalItem.id, 'in_progress')" :disabled="modalLoading" style="margin-left:8px">Mark In Progress</button>
+             <div class="border-t pt-4 mt-6">
+                <label class="block text-sm font-medium text-slate-700 mb-2">Rejection Reason</label>
+                <textarea v-model="modalRejection" rows="2" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
+                <div class="flex justify-end gap-3 mt-4">
+                   <button @click="updateHousingStatus('approved')" :disabled="modalLoading" class="px-4 py-2 bg-emerald-600 text-white rounded text-sm font-semibold hover:bg-emerald-700">Approve</button>
+                   <button @click="updateHousingStatus('rejected')" :disabled="modalLoading" class="px-4 py-2 bg-white border border-red-200 text-red-600 rounded text-sm font-semibold hover:bg-red-50">Reject</button>
+                </div>
+             </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- extension editor modal -->
-    <div v-if="extensionModalOpen" class="jrj-modal" style="display:block;">
-      <div class="jrj-modal-body">
-        <button class="jrj-modal-close" @click="closeExtensionModal()">×</button>
-        <h3>Edit Payment Agreement Extension</h3>
-
-        <div v-if="extensionModalLoading">Saving…</div>
-
-        <div style="margin-top:12px;">
-          <div class="pretty-section">
-            <div>Status</div><div>{{ extensionForm.extension_enabled === 1 ? "Enable" : 'Disable' }}</div>
-            <div class="pretty-row"><div class="pretty-key">Expires At</div><div class="pretty-value">{{ extensionForm.extended_until || '—' }}</div></div>
-            <div class="pretty-row"><div class="pretty-key">Note</div><div class="pretty-value">{{ extensionForm.note || '—' }}</div></div>
-          </div>
+    <div v-if="medicalModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" @click.self="medicalModalOpen=false">
+      <div class="bg-white w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <h3 class="text-lg font-bold text-slate-800">Medical Record</h3>
+          <button @click="medicalModalOpen=false" class="text-slate-400 hover:text-slate-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
         </div>
-   
-        <h3>Applican Housing/Rental Info</h3>
+        <div v-if="modalLoading" class="p-10 text-center text-slate-400">Loading...</div>
+        <div v-else-if="!medicalItem" class="p-10 text-center"><div class="bg-amber-50 text-amber-700 p-4 rounded inline-block">No medical record.</div></div>
+        <div v-else class="flex flex-col h-full overflow-hidden">
+           <div class="flex border-b border-slate-200 bg-white px-6">
+              <button @click="activeTab='history'" :class="activeTab==='history' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500'" class="px-4 py-3 text-sm font-bold border-b-2 transition-colors">History</button>
+              <button @click="activeTab='clearance'" :class="activeTab==='clearance' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500'" class="px-4 py-3 text-sm font-bold border-b-2 transition-colors">Clearance</button>
+           </div>
+           <div class="p-6 overflow-y-auto bg-slate-50/50 flex-1">
+              
+              <div v-if="activeTab==='history'">
+                <div class="space-y-6">
+                    
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="px-6 py-4 border-b border-slate-200 bg-slate-50">
+                            <h4 class="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                                Personal Information
+                            </h4>
+                        </div>
+                        
+                        <div v-if="medicalItem.details && medicalItem.details.medical_history" class="p-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <template v-for="(ans, question, index) in medicalItem.details.medical_history">
+                                    <div v-if="index < 7" :key="question">
+                                        <label class="block text-xs font-bold text-slate-400 uppercase mb-1">{{ pretty(question) }}</label>
+                                        <div class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-1">
+                                            {{ ans || '-' }}
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-          <div>
-            <label>Tenant first name</label>
-            <input v-model="extensionForm.tenant_first_name" class="widefat" />
-          </div>
-          <div>
-            <label>Tenant last name</label>
-            <input v-model="extensionForm.tenant_last_name" class="widefat" />
-          </div>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                            <h4 class="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                                Medical Conditions
+                            </h4>
+                        </div>
 
-          <div>
-            <label>Phone</label>
-            <input v-model="extensionForm.tenant_phone" class="widefat" />
-          </div>
-          <div>
-            <label>Email</label>
-            <input v-model="extensionForm.tenant_email" class="widefat" />
-          </div>
+                        <div v-if="medicalItem.details && medicalItem.details.medical_history" class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-slate-50 text-slate-500 font-bold text-xs uppercase tracking-wider border-b border-slate-200">
+                                    <tr>
+                                        <th class="px-6 py-3 w-2/3">Condition</th>
+                                        <th class="px-6 py-3 w-1/3">Response</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <template v-for="(ans, question, index) in medicalItem.details.medical_history">
+                                        <tr v-if="index >= 7" :key="question" 
+                                            class="transition-colors"
+                                            :class="(ans === 'Yes' || ans === true) ? 'bg-red-50 hover:bg-red-100/50' : 'hover:bg-slate-50'">
+                                            
+                                            <td class="px-6 py-3 font-medium text-slate-700">
+                                                {{ pretty(question) }}
+                                            </td>
+                                            
+                                            <td class="px-6 py-3 font-bold">
+                                                <span v-if="ans === 'Yes' || ans === true" class="inline-flex items-center gap-1.5 text-red-700 bg-white border border-red-200 px-2.5 py-1 rounded text-xs shadow-sm">
+                                                    <svg class="w-3 h-3 text-red-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                                                    YES
+                                                </span>
+                                                <span v-else class="text-slate-400 text-xs uppercase">
+                                                    {{ ans || 'No' }}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div v-else class="text-center py-12 text-slate-400 italic">
+                            No medical data available.
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-          <div style="grid-column:1 / -1;">
-            <label>Rental address</label>
-            <input v-model="extensionForm.rental_address" class="widefat" />
-          </div>
-
-          <div>
-            <label>Original due date</label>
-            <input type="date" v-model="extensionForm.due_on" class="widefat" />
-          </div>
-          
-            
-          <div>
-            <label>Extended until</label>
-            <input :min="nextDay()" type="date" v-model="extensionForm.extended_until" class="widefat" />
-          </div>
-
+              <div v-if="activeTab==='clearance'">
+                 <div class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm mb-6 flex justify-between">
+                    <div><div class="text-xs text-slate-400 font-bold uppercase">Conditions?</div><div class="text-lg font-bold" :class="medicalItem.has_conditions==='yes'?'text-red-600':'text-emerald-600'">{{ medicalItem.has_conditions.toUpperCase() }}</div></div>
+                    <div class="text-right"><div class="text-xs text-slate-400 font-bold uppercase">Status</div><span class="px-3 py-1 rounded-full text-sm font-bold border mt-1 inline-block" :class="statusClass(medicalItem.medical_clearance_status)">{{ medicalItem.medical_clearance_status.toUpperCase() }}</span></div>
+                 </div>
+                 <div v-if="medicalItem.has_conditions === 'yes'" class="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
+                    <h4 class="text-sm font-bold text-slate-800 mb-4">Clearance Certificate</h4>
+                    <div v-if="medicalItem.medical_clearance_file" class="flex items-center gap-4 p-4 bg-blue-50 rounded-lg border border-blue-100 mb-6">
+                       <div class="text-blue-500"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z" /></svg></div>
+                       <a :href="medicalItem.medical_clearance_file" target="_blank" class="text-sm text-blue-600 hover:underline font-bold">View / Download PDF</a>
+                    </div>
+                    <div class="flex gap-3 justify-end pt-4 border-t">
+                        <button @click="updateMedicalStatus('rejected')" :disabled="modalLoading" class="px-4 py-2 border border-red-200 text-red-600 rounded hover:bg-red-50">Reject</button>
+                        <button @click="updateMedicalStatus('approved')" :disabled="modalLoading" class="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">Approve</button>
+                    </div>
+                 </div>
+              </div>
+           </div>
         </div>
+      </div>
+    </div>
+
+    <div v-if="extensionModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm" @click.self="extensionModalOpen=false">
+      <div class="bg-white w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
-        <div style="margin-top:8px;">
-          <label>Note or Rejection Reason</label>
-          <textarea v-model="extensionForm.note" rows="3" style="width:100%"></textarea>
+        <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <h3 class="text-lg font-bold text-slate-800">Manage Payment Extension</h3>
+          <button @click="extensionModalOpen=false" class="text-slate-400 hover:text-slate-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
         </div>
 
-        <div style="margin-top:12px;text-align:right;">
-          <button class="button" @click="extentionUpdate(modalItem.id, 'approved')" :disabled="extensionModalLoading">Approve</button>
-          <button class="button" @click="extentionUpdate(modalItem.id, 'rejected')" :disabled="extensionModalLoading" style="margin-left:8px">Reject</button>
-          <button class="button" @click="extentionUpdate(modalItem.id, 'in_progress')" :disabled="extensionModalLoading" style="margin-left:8px">Mark In Progress</button>
-          <button class="button" @click="saveExtensionForApplicant(modalItem.applicant_id)" :disabled="extensionModalLoading" style="margin-left:8px">Send Payment Agreement Extension Paper for sign</button>
-          <button class="button" style="margin-left:8px" @click="closeExtensionModal()">Close</button>
+        <div class="p-6 overflow-y-auto">
+           <div v-if="extensionModalLoading" class="text-center text-slate-400 py-8">Processing...</div>
+           <div v-else class="space-y-6">
+              
+              <div class="flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
+                 <div>
+                    <h4 class="font-bold text-indigo-900">Extension Agreement</h4>
+                    <p class="text-xs text-indigo-600">Toggle the user's ability to see and sign the extension form.</p>
+                 </div>
+                 <div class="flex items-center gap-2">
+                    <button v-if="extensionForm.enabled" @click="toggleExtension(modalItem.applicant_id, 0)" class="px-3 py-1.5 bg-white border border-red-200 text-red-600 text-xs font-bold rounded shadow-sm hover:bg-red-50">REVOKE</button>
+                    <button v-else @click="toggleExtension(modalItem.applicant_id, 1)" class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded shadow-sm hover:bg-indigo-700">ENABLE</button>
+                 </div>
+              </div>
+
+              <div>
+                 <h4 class="text-sm font-bold text-slate-700 mb-3 border-b pb-1">Agreement Details</h4>
+                 <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">First Name</label><input v-model="extensionForm.tenant_first_name" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">Last Name</label><input v-model="extensionForm.tenant_last_name" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                    
+                    <div class="col-span-2"><label class="block text-xs font-bold text-slate-500 mb-1">Rental Address</label><input v-model="extensionForm.rental_address" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                    
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">Phone</label><input v-model="extensionForm.tenant_phone" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">Email</label><input v-model="extensionForm.tenant_email" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                    
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">Original Due Date</label><input type="date" v-model="extensionForm.due_on" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                    <div><label class="block text-xs font-bold text-slate-500 mb-1">Extended Until</label><input type="date" :min="nextDay()" v-model="extensionForm.extended_until" class="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-200 outline-none" /></div>
+                 </div>
+                 
+                 <div class="mt-4">
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Notes / Internal Comments</label>
+                    <textarea v-model="extensionForm.note" rows="2" class="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-indigo-200 outline-none"></textarea>
+                 </div>
+              </div>
+           </div>
         </div>
+
+        <div class="p-5 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+           <div class="flex gap-2">
+              <button @click="extensionUpdateStatus(modalItem.id, 'approved')" :disabled="extensionModalLoading" class="px-3 py-1.5 border border-emerald-300 text-emerald-700 bg-emerald-50 rounded text-xs font-bold hover:bg-emerald-100">Approve</button>
+              <button @click="extensionUpdateStatus(modalItem.id, 'rejected')" :disabled="extensionModalLoading" class="px-3 py-1.5 border border-red-300 text-red-700 bg-red-50 rounded text-xs font-bold hover:bg-red-100">Reject</button>
+           </div>
+           <div class="flex gap-3">
+              <button @click="extensionModalOpen=false" class="px-4 py-2 border border-slate-300 rounded text-sm font-medium hover:bg-white text-slate-600">Close</button>
+              <button @click="saveExtensionForApplicant(modalItem.applicant_id)" :disabled="extensionModalLoading" class="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-medium hover:bg-indigo-700 shadow">Save & Send Agreement</button>
+           </div>
+        </div>
+
       </div>
     </div>
 

@@ -97674,7 +97674,7 @@ const CandidateProfile = {
     // checks currentApp first, then items array for any enabled extension
     const hasExtension = (0,vue__WEBPACK_IMPORTED_MODULE_0__.computed)(() => {
       // check current application
-      const ext1 = parsePaymentExtension(currentApp.value?.payment_extension).extension_enabled;
+      const ext1 = parsePaymentExtension(currentApp.value?.payment_extension).agreement_enable;
       // const ext1 = currentApp.value?.extension_enabled;
 
       if (ext1 && Number(ext1) === 1) return true;
@@ -98989,6 +98989,17 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
 
     // ---------- Actions ----------
     const saveAffidavit = async () => {
+      const missing = getMissingFields();
+      if (missing.length > 0) {
+        showErrors.value = true;
+        // Auto-scroll logic
+        const firstErr = missing[0];
+        if (firstErr && firstErr.pageIndex + 1 !== currentPage.value) {
+          await changePage(firstErr.pageIndex + 1 - currentPage.value);
+        }
+        showModal("error", "Missing Fields", `Please fill all highlighted fields.`);
+        return;
+      }
       saving.value = true;
       try {
         const appId = getApplicantId();
@@ -99265,6 +99276,12 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
       return await pdfDoc.save();
     };
     const validateAndDownload = async () => {
+      const missing = getMissingFields();
+      if (missing.length > 0) {
+        showErrors.value = true;
+        showModal("error", "Incomplete", "Please fill in all required fields.");
+        return;
+      }
       try {
         const bytes = await generatePdfBytes();
         const blob = new Blob([bytes], {
@@ -99278,6 +99295,29 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_1__.GlobalWorkerOptions.workerSrc = new URL(
       } catch (e) {
         showModal("error", "Export Error", e.message);
       }
+    };
+    const getMissingFields = () => {
+      const missing = [];
+      const groups = {};
+      fields.value.forEach(f => {
+        if (!groups[f.acroName]) groups[f.acroName] = [];
+        groups[f.acroName].push(f);
+      });
+      for (const [name, widgets] of Object.entries(groups)) {
+        // Skip checkboxes for required checks (usually optional)
+        if (widgets.some(w => w.type === "checkbox")) continue;
+        if (widgets.some(w => w.type === "radio")) {
+          const hasVal = widgets.some(w => formData[w.overlayKey] === w.value || formData[w.overlayKey] === true);
+          if (!hasVal) missing.push(widgets[0]); // Push the first widget of the group to track page
+        } else {
+          // Text fields
+          widgets.forEach(w => {
+            const v = formData[w.overlayKey];
+            if (!v || v === "") missing.push(w);
+          });
+        }
+      }
+      return missing;
     };
     (0,vue__WEBPACK_IMPORTED_MODULE_0__.watch)([fields, formData], () => {
       if (suppressAutoHas.value) return;
@@ -100180,7 +100220,7 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_2__.GlobalWorkerOptions.workerSrc = new URL(
         item.payment_extension = item.payment_extension || {};
         item.payment_extension.status = "submitted";
         showPanel.value = false;
-        showModal("success", "Success", "Agreement signed and submitted successfully!", "Close", () => {});
+        showModal("success", "Success", "Agreement signed and submitted successfully!", () => {});
         window.scrollTo({
           top: 0,
           behavior: "smooth"
@@ -100343,8 +100383,9 @@ pdfjs_dist__WEBPACK_IMPORTED_MODULE_2__.GlobalWorkerOptions.workerSrc = new URL(
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
           </div>
           <div>
-            <h1 class="text-xl font-bold text-slate-900">Payment Extension Agreement</h1>
-            <p class="text-sm text-slate-500">Review document details and sign below.</p>
+            <h1 class="text-xl font-bold text-slate-900 mb-2">Payment Extension Agreement</h1>
+            <span class="text-sm text-red-500">{{item.payment_extension?.notes}}</span>
+            
           </div>
         </div>
 
