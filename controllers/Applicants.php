@@ -74,14 +74,6 @@ class Applicants {
 			)
 		);
 
-		// register_rest_route( 'jamrock/v1', '/profile/(?P<id>[a-zA-Z0-9_-]+)', array(
-		// 	'methods'             => 'GET',
-		// 	'callback'            => array( $this, 'get_user_profile' ),
-		// 	'permission_callback' => function() {
-		// 		return is_user_logged_in();
-		// 	},
-		// ));
-
 		register_rest_route( 'jamrock/v1', '/profile/update', array(
 			'methods'  => 'POST',
 			'callback' => array( $this, 'profile_update' ),
@@ -157,35 +149,90 @@ class Applicants {
 	 */
 	public function candidate_profile( $atts ) {
 
-		// login user load css.
 		wp_enqueue_style( 'jamrock-frontend' );
-
-		// not logged in.
+	
 		if ( ! is_user_logged_in() ) {
 			
-			// generate login form (echo false is required)
 			$args = array(
-				'echo' => false,
-				'redirect' => ( is_ssl() ? 'https://' : 'http://' ) . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], 
+				'echo'           => false,
+				'redirect'       => ( is_ssl() ? 'https://' : 'http://' ) . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], 
+				'label_username' => __( 'Email or Username' ),
+				'label_password' => __( 'Password' ),
+				'label_remember' => __( 'Remember Me' ),
+				'label_log_in'   => __( 'Sign In' ),
+				'id_username'    => 'user_login',
+				'id_password'    => 'user_pass',
+				'id_submit'      => 'wp-submit',
+				'remember'       => true,
+				'value_remember' => true,
 			);
 			$login_form = wp_login_form( $args );
 	
-			// register link
-			$reg_url = wp_registration_url();
+			$reg_url = get_option( 'jrj_set_registration_page', '' );
+			if ( empty( $reg_url ) ) $reg_url = wp_registration_url();
+			else $reg_url = home_url( $reg_url );
+			$reg_url = esc_url( $reg_url );
+			
+			// --- NEW MODERN SVG ILLUSTRATION (Abstract Shield/Home/Growth) ---
+			$svg_illustration = '
+			<svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg" class="jrj-login-svg">
+				<defs>
+					<linearGradient id="brandGradModern" x1="0%" y1="0%" x2="100%" y2="100%">
+						<stop offset="0%" style="stop-color:#E8A674;stop-opacity:1" />
+						<stop offset="100%" style="stop-color:#D68A50;stop-opacity:1" />
+					</linearGradient>
+					<filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+						<feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur" />
+						<feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" />
+						<feComposite in="SourceGraphic" in2="goo" operator="atop"/>
+					</filter>
+				</defs>
+				
+				<circle cx="250" cy="250" r="220" fill="#FFF7ED" opacity="0.8" />
+				
+				<g class="jrj-svg-content">
+					<path fill="url(#brandGradModern)" d="M250,80 L420,170 V330 C420,420 250,480 250,480 C250,480 80,420 80,330 V170 L250,80 Z" opacity="0.15" />
+					<path fill="none" stroke="url(#brandGradModern)" stroke-width="4" d="M250,90 L410,175 V325 C410,410 250,465 250,465 C250,465 90,410 90,325 V175 L250,90 Z" />
 	
-			// output
-			$output  = '<div class="jrj-login-wrapper">';
-			$output .= '<h3>Please Login</h3>';
-			$output .= $login_form;
-			$output .= '<p class="jrj-reg-link" style="margin-top: 10px;">';
-			$output .= 'Don\'t have an account? <a href="' . esc_url( $reg_url ) . '">Register here</a>';
-			$output .= '</p>';
+					<path fill="#FFFFFF" d="M250 180 L350 240 L250 300 L150 240 Z" opacity="0.9"/>
+					<path fill="url(#brandGradModern)" d="M250 220 L310 260 L250 380 L190 260 Z" />
+					
+					<circle cx="120" cy="150" r="15" fill="#E8A674" opacity="0.6" />
+					<circle cx="380" cy="380" r="20" fill="#D68A50" opacity="0.4" />
+					<circle cx="400" cy="120" r="10" fill="#E8A674" opacity="0.5" />
+				</g>
+			</svg>';
+	
+			$output  = '<div class="jrj-login-container">';
+			
+			// LEFT SIDE
+			$output .=   '<div class="jrj-login-left">';
+			$output .=      $svg_illustration;
+			// --- NEW TEXT ---
+			$output .=      '<div class="jrj-left-text">';
+			$output .=          '<h3>Your Unified Portal</h3>';
+			$output .=          '<p>Seamless access to housing, education, and wellness services.</p>';
+			$output .=      '</div>';
+			// ----------------
+			$output .=   '</div>';
+	
+			// RIGHT SIDE
+			$output .=   '<div class="jrj-login-right">';
+			$output .=      '<div class="jrj-form-content">';
+			$output .=          '<h2 class="jrj-welcome-title">Holla,<br>Welcome Back</h2>';
+			$output .=          '<p class="jrj-welcome-subtitle">Hey, welcome back to your special place</p>';
+			$output .=          $login_form;
+			$output .=          '<div class="jrj-reg-link">';
+			$output .=              'Don\'t have an account? <a href="' . $reg_url . '">Sign Up</a>';
+			$output .=          '</div>';
+			$output .=      '</div>';
+			$output .=   '</div>';
+	
 			$output .= '</div>';
 	
 			return $output;
 		}
 	
-		
 		return '<div id="jrj-candidate-profile" data-user-id="' . esc_attr( get_current_user_id() ) . '"></div>';
 	}
 

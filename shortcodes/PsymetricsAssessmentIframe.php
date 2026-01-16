@@ -28,7 +28,7 @@ class PsymetricsAssessmentIframe {
 	}
 
 	public static function render( $atts ): string {
-		unset( $atts ); // Unused.
+		unset( $atts );
 
 		wp_enqueue_style( 'jamrock-frontend' );
 
@@ -43,7 +43,7 @@ class PsymetricsAssessmentIframe {
 		$token = isset( $_GET['token'] ) ? sanitize_text_field( (string) $_GET['token'] ) : '';
 
 		if ( ! $entry_id || $token === '' ) {
-			$apply_now     = (string) get_option( 'jrj_set_login_page', '' );
+			$apply_now     = (string) get_option( 'jrj_set_registration_page', '' );
 			$apply_now_url = home_url( $apply_now );
 
 			// Use safe WordPress redirect
