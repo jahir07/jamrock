@@ -914,3 +914,192 @@ iframe.jrj-psym {
     }
 }
 
+/* ------------------ Login ------------------ */
+.jrj-login-container {
+    display: flex;
+    flex-wrap: wrap;
+    min-height: 800px;
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(232, 166, 116, 0.15); /* Soft Brand Shadow */
+    overflow: hidden;
+    max-width: 1000px;
+    font-family: 'Inter', sans-serif;
+}
+
+/* --- Left Side (Illustration) --- */
+.jrj-login-left {
+    flex: 1;
+    /* Brand Flavor Gradient Background */
+    background: linear-gradient(135deg, #FFF8F3 0%, #FFEAD5 100%); 
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 40px;
+    min-width: 300px;
+    text-align: center;
+}
+
+.jrj-login-svg {
+    width: 80%;
+    max-width: 350px;
+    height: auto;
+    margin-bottom: 20px;
+    animation: float 6s ease-in-out infinite;
+}
+
+.jrj-left-text h3 {
+    color: #9A5B28; /* Darker shade of brand color for text */
+    margin: 0 0 10px 0;
+    font-size: 24px;
+    font-weight: 700;
+}
+.jrj-left-text p {
+    color: #8D7666; /* Warm Gray */
+    margin: 0;
+}
+
+/* --- Right Side (Form) --- */
+.jrj-login-right {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 50px;
+    min-width: 300px;
+    background: #fff;
+}
+
+.jrj-form-content {
+    width: 100%;
+    max-width: 350px;
+}
+
+.jrj-welcome-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1F1F1F;
+    line-height: 1.2;
+    margin-bottom: 10px;
+}
+
+.jrj-welcome-subtitle {
+    color: #9CA3AF;
+    font-size: 14px;
+    margin-bottom: 30px;
+}
+
+/* --- Form Styling --- */
+.jrj-login-right .login-username,
+.jrj-login-right .login-password {
+    margin-bottom: 20px;
+}
+
+.jrj-login-right label {
+    display: block;
+    margin-bottom: 8px;
+    color: #4B5563;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.jrj-login-right input[type="text"],
+.jrj-login-right input[type="password"] {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+    background: #FAFAFA;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+}
+
+/* Focus State with Brand Color */
+.jrj-login-right input[type="text"]:focus,
+.jrj-login-right input[type="password"]:focus {
+    border-color: #E8A674;
+    background: #fff;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(232, 166, 116, 0.2); /* Brand color glow */
+}
+
+.jrj-login-right .login-remember {
+    margin-bottom: 25px;
+    font-size: 13px;
+    color: #6B7280;
+    display: flex;
+    align-items: center;
+}
+
+.jrj-login-right .login-submit {
+    margin-top: 10px;
+}
+
+/* Submit Button with Brand Color */
+.jrj-login-right input[type="submit"] {
+    width: 100%;
+    background-color: #E8A674;
+    color: white;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s, transform 0.1s;
+    font-size: 16px;
+    box-shadow: 0 4px 6px -1px rgba(232, 166, 116, 0.4);
+}
+
+.jrj-login-right input[type="submit"]:hover {
+    background-color: #D68A50; /* Slightly Darker */
+    transform: translateY(-1px);
+}
+
+.jrj-login-right input[type="submit"]:active {
+    transform: translateY(1px);
+}
+
+/* --- Registration Link --- */
+.jrj-reg-link {
+    margin-top: 25px;
+    text-align: center;
+    font-size: 14px;
+    color: #6B7280;
+}
+
+.jrj-reg-link a {
+    color: #E8A674;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.jrj-reg-link a:hover {
+    color: #D68A50;
+    text-decoration: underline;
+}
+
+/* --- Animation --- */
+@keyframes float {
+    0% { transform: translatey(0px); }
+    50% { transform: translatey(-10px); }
+    100% { transform: translatey(0px); }
+}
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+    .jrj-login-container {
+        flex-direction: column;
+    }
+    .jrj-login-left {
+        padding: 30px;
+        min-height: 200px;
+    }
+    .jrj-login-svg {
+        max-width: 150px;
+    }
+    .jrj-login-right {
+        padding: 30px;
+    }
+}

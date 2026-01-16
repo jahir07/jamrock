@@ -8,7 +8,7 @@ export default {
       form_id: "",
       api_key: "",
       callback_ok: "",
-      set_login_page: "",
+      set_registration_page: "",
       set_assessment_page: "",
       loading: false,
       saving: false,
@@ -28,7 +28,7 @@ export default {
         state.form_id = data.form_id ?? "";
         state.api_key = data.api_key ?? "";
         state.callback_ok = data.callback_ok ?? "";
-        state.set_login_page = data.set_login_page ?? "";
+        state.set_registration_page = data.set_registration_page ?? "";
         state.set_assessment_page = data.set_assessment_page ?? "";
         await nextTick();
       } catch {
@@ -53,7 +53,7 @@ export default {
             form_id: Number(state.form_id) || 0,
             api_key: state.api_key || "",
             callback_ok: state.callback_ok || "",
-            set_login_page: state.set_login_page || "",
+            set_registration_page: state.set_registration_page || "",
             set_assessment_page: state.set_assessment_page || "",
           }),
         });
@@ -87,8 +87,8 @@ export default {
         <h3>Psymetrics and Gravity Form Settings</h3>
         <table class="form-table striped"><tbody>
           <tr><th><label>Gravity Form ID</label></th><td><input type="number" v-model.number="state.form_id" /></td></tr>
-          <tr><th><label>Set Login page URL</label></th><td><input type="text" v-model="state.set_login_page" placeholder="/apply-now" /></td></tr>
-          <tr><th><label>Set Assessment page URL</label></th><td><input type="text" v-model="state.set_assessment_page" placeholder="/assessment" /></td></tr>
+          <tr><th><label>Registration page URL</label></th><td><input type="text" v-model="state.set_registration_page" placeholder="/apply-now" /></td></tr>
+          <tr><th><label>Assessment page URL</label></th><td><input type="text" v-model="state.set_assessment_page" placeholder="/assessment" /></td></tr>
           <tr><th><label>Psymetrics API Key</label></th><td><input type="password" v-model="state.api_key" /></td></tr>
           <tr><th><label>Callback URL (webhook)</label></th><td><input type="url" v-model="state.callback_ok" placeholder="https://..." /></td></tr>
         </tbody></table>
