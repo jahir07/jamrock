@@ -28,7 +28,19 @@ class Applicants {
 	 */
 	public function hooks(): void {
 		add_action( 'rest_api_init', array( $this, 'routes' ) );
+		add_action( 'after_setup_theme', array( $this, 'hide_admin_bar' ) );
 		add_shortcode( 'jrj_candidate_profile', array( $this, 'candidate_profile' ) );
+	}
+
+	/**
+	 * Hide admin bar for non-administrators.
+	 *
+	 * @return void
+	 */
+	public function hide_admin_bar(): void {
+		if ( ! current_user_can( 'administrator' ) && ! is_admin() ) {
+			show_admin_bar( false );
+		}
 	}
 
 	/**
@@ -61,6 +73,80 @@ class Applicants {
 				'callback'            => array( $this, 'profile_info' ),
 			)
 		);
+
+		// register_rest_route( 'jamrock/v1', '/profile/(?P<id>[a-zA-Z0-9_-]+)', array(
+		// 	'methods'             => 'GET',
+		// 	'callback'            => array( $this, 'get_user_profile' ),
+		// 	'permission_callback' => function() {
+		// 		return is_user_logged_in();
+		// 	},
+		// ));
+
+		register_rest_route( 'jamrock/v1', '/profile/update', array(
+			'methods'  => 'POST',
+			'callback' => array( $this, 'profile_update' ),
+			'permission_callback' => function() {
+				return is_user_logged_in();
+			}
+		));
+	}	
+
+	/**
+	 * Update user profile with Image Upload support
+	 * Method: POST
+	 */
+	public function profile_update( \WP_REST_Request $request ) {
+		$user_id = get_current_user_id();
+		
+		// 1. Update Name (Using get_param to retrieve from FormData)
+		$display_name = $request->get_param( 'display_name' );
+		if ( ! empty( $display_name ) ) {
+			wp_update_user( array(
+				'ID'           => $user_id,
+				'display_name' => sanitize_text_field( $display_name ),
+				'first_name'   => sanitize_text_field( $display_name )
+			));
+		}
+
+		// 2. Update Password
+		$password = $request->get_param( 'password' );
+		if ( ! empty( $password ) ) {
+			wp_update_user( array(
+				'ID'        => $user_id,
+				'user_pass' => $password
+			));
+		}
+
+		// 3. Handle Image Upload
+		$files = $request->get_file_params();
+		$new_avatar_url = '';
+
+		// Check if 'profile_image' exists in the uploaded files
+		if ( ! empty( $files['profile_image'] ) ) {
+			require_once( ABSPATH . 'wp-admin/includes/image.php' );
+			require_once( ABSPATH . 'wp-admin/includes/file.php' );
+			require_once( ABSPATH . 'wp-admin/includes/media.php' );
+
+			// Upload image to WordPress Media Library
+			$attachment_id = media_handle_upload( 'profile_image', 0 );
+
+			if ( is_wp_error( $attachment_id ) ) {
+				return new WP_Error( 'upload_error', 'Image upload failed: ' . $attachment_id->get_error_message(), array( 'status' => 500 ) );
+			}
+
+			// Get the image URL from the attachment ID
+			$new_avatar_url = wp_get_attachment_url( $attachment_id );
+
+			// Save the image URL as user meta in the database
+			// We are using 'jrj_custom_avatar' as the meta key
+			update_user_meta( $user_id, 'jrj_custom_avatar', $new_avatar_url );
+		}
+
+		return array( 
+			'success' => true, 
+			'message' => 'Profile updated successfully',
+			'new_avatar_url' => $new_avatar_url // Return new URL to update frontend immediately
+		);
 	}
 
 	/**
@@ -70,10 +156,36 @@ class Applicants {
 	 * @return string
 	 */
 	public function candidate_profile( $atts ) {
-		if ( ! is_user_logged_in() ) {
-			return '<p>Please log in to see your profile.</p>';
-		}
+
+		// login user load css.
 		wp_enqueue_style( 'jamrock-frontend' );
+
+		// not logged in.
+		if ( ! is_user_logged_in() ) {
+			
+			// generate login form (echo false is required)
+			$args = array(
+				'echo' => false,
+				'redirect' => ( is_ssl() ? 'https://' : 'http://' ) . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], 
+			);
+			$login_form = wp_login_form( $args );
+	
+			// register link
+			$reg_url = wp_registration_url();
+	
+			// output
+			$output  = '<div class="jrj-login-wrapper">';
+			$output .= '<h3>Please Login</h3>';
+			$output .= $login_form;
+			$output .= '<p class="jrj-reg-link" style="margin-top: 10px;">';
+			$output .= 'Don\'t have an account? <a href="' . esc_url( $reg_url ) . '">Register here</a>';
+			$output .= '</p>';
+			$output .= '</div>';
+	
+			return $output;
+		}
+	
+		
 		return '<div id="jrj-candidate-profile" data-user-id="' . esc_attr( get_current_user_id() ) . '"></div>';
 	}
 
@@ -184,12 +296,22 @@ class Applicants {
 			);
 		}
 
+		$custom_avatar = get_user_meta( $user_id, 'jrj_custom_avatar', true );
+
+		// 2. If custom avatar exists use it, otherwise use default Gravatar
+		if ( ! empty( $custom_avatar ) ) {
+			$avatar_url = $custom_avatar;
+		} else {
+			$avatar_url = get_avatar_url( $user_id );
+		}
+		
+
 		// Build profile payload (existing fields + courses)
 		$profile = array(
 			'id'                 => $user->ID,
 			'display_name'       => $user->display_name,
 			'email'              => $user->user_email,
-			'avatar'             => get_avatar_url( $user->ID ),
+			'avatar'             => $avatar_url,
 			'courses_count'      => count( $courses ),
 			'completed_count'    => count(
 				array_filter(

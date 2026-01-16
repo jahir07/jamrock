@@ -2,8 +2,6 @@
 /**
  * Autoproctoring REST controller.
  *
- * PHP version 7.4+
- *
  * @package Jamrock\Controllers
  */
 

@@ -1,4 +1,3 @@
-// Inject component-scoped CSS once.!
 export default {
   name: "ApplicantsWithComposite",
   data() {
@@ -142,7 +141,7 @@ export default {
           <td class="actions">
             <a class="button" :href="urlPhysical(r)" target="_blank">Physical</a>
             <a class="button" :href="urlSkills(r)"   target="_blank">Skills</a>
-            <a class="button" :href="urlMedical(r)"  target="_blank">Medical</a>
+            <!-- <a class="button" :href="urlMedical(r)"  target="_blank">Medical</a> -->
           </td>
         </tr>
         <tr v-if="!rows.length"><td colspan="8">No applicants.</td></tr>
@@ -162,7 +161,6 @@ export default {
     <div v-else-if="snapLoading">Loading…</div>
     <div v-else-if="snap">
       <div class="row items-center">
-        <!-- Bind --pct so the donut fills correctly. -->
         <div class="donut" :style="{ '--pct': pct() }"><div class="donut-ring">{{ pct() }}</div></div>
         <div class="ml-16">
           <div class="big">{{ Math.round(snap.composite||0) }}/100 ({{ snap.grade||'?' }})</div>
